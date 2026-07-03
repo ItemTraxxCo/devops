@@ -1,0 +1,35 @@
+name: Summarize Failure
+description: >-
+  Deterministic ownership classification plus optional AI root-cause triage
+  for a failed workflow run. Degrades gracefully when no ANTHROPIC_API_KEY
+  is provided.
+
+inputs:
+  logs_path:
+    description: Path to the concatenated failed-job logs.
+    required: true
+  context_path:
+    description: Path to the run context JSON (repository, run_url, workflow_name, branch, sha, failed_jobs).
+    required: true
+  output_path:
+    description: Where to write the triage markdown.
+    required: true
+  anthropic_api_key:
+    description: Anthropic API key. Optional; without it only deterministic triage runs.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Run failure triage
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        LOGS_PATH: ${{ inputs.logs_path }}
+        CONTEXT_PATH: ${{ inputs.context_path }}
+        OUTPUT_PATH: ${{ inputs.output_path }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        node "$ACTION_PATH/../../scripts/ai/triage-failure.mjs"

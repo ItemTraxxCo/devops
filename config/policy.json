@@ -1,0 +1,41 @@
+{
+  "ai": {
+    "default_model": "claude-sonnet-5",
+    "model_env_override": "ITX_AI_MODEL",
+    "max_tokens": 1500,
+    "graceful_degradation": "All AI features skip cleanly when ANTHROPIC_API_KEY is absent."
+  },
+  "labels": {
+    "risk_prefix": "risk:",
+    "risk_categories": [
+      "risk:auth-sensitive",
+      "risk:tenant-boundary",
+      "risk:edge-ingress",
+      "risk:database",
+      "risk:legal-compliance",
+      "risk:deploy-config",
+      "risk:dependencies",
+      "risk:frontend-only"
+    ],
+    "safe_merge": "safe-merge-candidate"
+  },
+  "severity": {
+    "deploy_failure": "high",
+    "synthetic_probe_failure": "high",
+    "deployment_health_failure": "high",
+    "ci_failure": "medium",
+    "notification_failure": "high"
+  },
+  "dependency_promotion": {
+    "allowed_update_types": [
+      "version-update:semver-patch",
+      "version-update:semver-minor"
+    ],
+    "automerge_default": false
+  },
+  "notifications": {
+    "slack_webhook_secret": "SLACK_WEBHOOK_URL",
+    "slack_bot_secrets": ["SLACK_BOT_TOKEN", "SLACK_CHANNEL_ID"],
+    "incident_io_secrets": ["INCIDENT_IO_WEBHOOK_URL", "INCIDENT_IO_WEBHOOK_TOKEN"]
+  }
+}

@@ -1,0 +1,29 @@
+name: Setup Node CI
+description: >-
+  Standard ItemTraxx Node setup: pinned Node version with npm cache and
+  npm ci --ignore-scripts (avoids flaky native/CLI postinstall downloads).
+  Run after actions/checkout.
+
+inputs:
+  node-version:
+    description: Node version to install.
+    required: false
+    default: "22.15.0"
+  install:
+    description: Run npm ci --ignore-scripts after setup.
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+
+    - name: Install dependencies
+      if: ${{ inputs.install == 'true' }}
+      shell: bash
+      run: npm ci --ignore-scripts

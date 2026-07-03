@@ -1,0 +1,29 @@
+name: Run Synthetic Probes
+description: >-
+  Runs config-driven synthetic HTTP probes with retries and kill-switch
+  awareness. Uses the hub default ItemTraxx probe set when no config is given.
+
+inputs:
+  probes_config:
+    description: Inline JSON probe configuration. Empty uses config/itemtraxx-probes.json.
+    required: false
+    default: ""
+
+outputs:
+  results:
+    description: Single-line JSON summary of probe results.
+    value: ${{ steps.probes.outputs.results }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run probes
+      id: probes
+      shell: bash
+      env:
+        PROBES_CONFIG_JSON: ${{ inputs.probes_config }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        node "$ACTION_PATH/../../scripts/probes/run-probes.mjs" \
+          "$ACTION_PATH/../../config/itemtraxx-probes.json"

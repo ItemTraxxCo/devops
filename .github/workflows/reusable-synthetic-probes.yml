@@ -1,0 +1,31 @@
+name: Reusable Synthetic Probes
+
+permissions: {}
+
+on:
+  workflow_call:
+    inputs:
+      probes_config:
+        description: >-
+          JSON probe configuration (see config/itemtraxx-probes.json for the schema).
+          Leave empty to use the hub default ItemTraxx probe set.
+        required: false
+        type: string
+        default: ""
+    outputs:
+      results:
+        description: JSON summary of probe results.
+        value: ${{ jobs.probes.outputs.results }}
+
+jobs:
+  probes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      results: ${{ steps.run.outputs.results }}
+    steps:
+      - name: Run synthetic probes
+        id: run
+        uses: ItemTraxxCo/devops/actions/run-probes@main
+        with:
+          probes_config: ${{ inputs.probes_config }}

@@ -1,0 +1,49 @@
+name: Collect Deploy Evidence
+description: >-
+  Builds a deploy evidence bundle (evidence.json + evidence.md) from run,
+  commit, and health data already collected into the workdir. Optional AI
+  deploy-impact summary when an Anthropic key is provided.
+
+inputs:
+  workdir:
+    description: Directory containing run.json, commit.json, and health.json.
+    required: true
+  repository:
+    description: owner/repo of the deployed repository.
+    required: true
+  run_id:
+    description: Deploy workflow run ID.
+    required: true
+  sha:
+    description: Deployed commit SHA.
+    required: true
+  workflow_name:
+    description: Deploy workflow name.
+    required: false
+    default: unknown
+  surfaces:
+    description: Comma-separated deploy surfaces.
+    required: false
+    default: unknown
+  anthropic_api_key:
+    description: Anthropic API key. Optional; without it the bundle omits the AI impact summary.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Build evidence bundle
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        WORKDIR: ${{ inputs.workdir }}
+        REPOSITORY: ${{ inputs.repository }}
+        RUN_ID: ${{ inputs.run_id }}
+        SHA: ${{ inputs.sha }}
+        WORKFLOW_NAME: ${{ inputs.workflow_name }}
+        SURFACES: ${{ inputs.surfaces }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        node "$ACTION_PATH/../../scripts/deploy/collect-evidence.mjs"

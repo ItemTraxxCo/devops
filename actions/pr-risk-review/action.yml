@@ -1,0 +1,39 @@
+name: PR Risk Review
+description: >-
+  Classifies a pull request into ItemTraxx risk categories from changed file
+  paths, with an optional AI narrative when an Anthropic key is provided.
+  Writes comment.md and labels.txt into the output directory.
+
+inputs:
+  pr_json_path:
+    description: Path to the PR metadata JSON (number, title, body, base, head).
+    required: true
+  files_json_path:
+    description: Path to the changed-files JSON array.
+    required: true
+  diff_path:
+    description: Path to the (truncated) unified diff.
+    required: true
+  output_dir:
+    description: Directory to write comment.md and labels.txt into.
+    required: true
+  anthropic_api_key:
+    description: Anthropic API key. Optional; without it only deterministic classification runs.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Run PR risk review
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        PR_JSON_PATH: ${{ inputs.pr_json_path }}
+        FILES_JSON_PATH: ${{ inputs.files_json_path }}
+        DIFF_PATH: ${{ inputs.diff_path }}
+        OUTPUT_DIR: ${{ inputs.output_dir }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        node "$ACTION_PATH/../../scripts/ai/pr-risk-review.mjs"

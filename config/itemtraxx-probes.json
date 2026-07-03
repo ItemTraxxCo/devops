@@ -1,0 +1,48 @@
+{
+  "statusUrl": "https://edge.itemtraxx.com/functions/system-status",
+  "origin": "https://itemtraxx.com",
+  "probes": [
+    {
+      "name": "public-site",
+      "url": "https://itemtraxx.com",
+      "expect": { "statusRange": [200, 399] },
+      "allowKillSwitchSkip": true
+    },
+    {
+      "name": "pricing-page",
+      "url": "https://itemtraxx.com/pricing",
+      "expect": { "statusRange": [200, 399] },
+      "allowKillSwitchSkip": true
+    },
+    {
+      "name": "tenant-login",
+      "url": "https://itemtraxx.com/login",
+      "expect": { "statusRange": [200, 399] },
+      "allowKillSwitchSkip": true
+    },
+    {
+      "name": "tenant-checkout-route",
+      "url": "https://itemtraxx.com/tenant/checkout",
+      "expect": { "statusRange": [200, 399] },
+      "allowKillSwitchSkip": true
+    },
+    {
+      "name": "edge-system-status",
+      "url": "https://edge.itemtraxx.com/functions/system-status",
+      "headers": { "Accept": "application/json" },
+      "expect": { "statusRange": [200, 299] },
+      "bodyContains": "kill_switch",
+      "attempts": 6,
+      "allowKillSwitchSkip": true
+    },
+    {
+      "name": "contact-sales-validation",
+      "url": "https://edge.itemtraxx.com/functions/contact-sales-submit",
+      "method": "POST",
+      "body": "{\"plan\":\"core\"}",
+      "expect": { "statusRange": [200, 499] },
+      "attempts": 6,
+      "allowKillSwitchSkip": true
+    }
+  ]
+}

@@ -1,0 +1,100 @@
+name: Reusable Slack Notify Failure
+
+permissions: {}
+
+on:
+  workflow_call:
+    inputs:
+      workflow_name:
+        required: true
+        type: string
+      job_name:
+        required: true
+        type: string
+      run_url:
+        required: true
+        type: string
+      ref_name:
+        required: true
+        type: string
+      sha:
+        required: true
+        type: string
+    secrets:
+      SLACK_WEBHOOK_URL:
+        required: true
+      INCIDENT_IO_WEBHOOK_URL:
+        required: false
+      INCIDENT_IO_WEBHOOK_TOKEN:
+        required: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Slack failure notification
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          WORKFLOW_NAME: ${{ inputs.workflow_name }}
+          JOB_NAME: ${{ inputs.job_name }}
+          RUN_URL: ${{ inputs.run_url }}
+          REF_NAME: ${{ inputs.ref_name }}
+          SHA: ${{ inputs.sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          SHORT_SHA="$(printf '%s' "$SHA" | cut -c1-7)"
+          PAYLOAD="$(jq -n \
+            --arg workflow "$WORKFLOW_NAME" \
+            --arg job "$JOB_NAME" \
+            --arg branch "$REF_NAME" \
+            --arg commit "$SHORT_SHA" \
+            --arg repo "$REPOSITORY" \
+            --arg run_url "$RUN_URL" \
+            '{
+              text: "GitHub Actions failure",
+              blocks: [
+                {
+                  type: "header",
+                  text: { type: "plain_text", text: ":x: GitHub Actions failure" }
+                },
+                {
+                  type: "section",
+                  fields: [
+                    { type: "mrkdwn", text: ("*Workflow:*\n" + $workflow) },
+                    { type: "mrkdwn", text: ("*Job:*\n" + $job) },
+                    { type: "mrkdwn", text: ("*Branch:*\n" + $branch) },
+                    { type: "mrkdwn", text: ("*Commit:*\n" + $commit) }
+                  ]
+                },
+                {
+                  type: "section",
+                  text: {
+                    type: "mrkdwn",
+                    text: ("*Repository:* " + $repo + "\n*Run:* <" + $run_url + "|Open failing run>")
+                  }
+                }
+              ]
+            }')"
+          curl -fsSL -X POST "$SLACK_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            --data "$PAYLOAD"
+
+  incidentio-notify-failure:
+    needs:
+      - notify
+    if: ${{ always() && (needs.notify.result == 'failure' || needs.notify.result == 'cancelled') }}
+    uses: ItemTraxxCo/devops/.github/workflows/reusable-incident-alert.yml@main
+    with:
+      status: ${{ needs.notify.result }}
+      severity: high
+      workflow_name: Reusable Slack Notify Failure
+      job_name: notify
+      run_url: ${{ inputs.run_url }}
+      repository: ${{ github.repository }}
+      branch: ${{ inputs.ref_name }}
+      sha: ${{ inputs.sha }}
+      environment: production
+    secrets:
+      INCIDENT_IO_WEBHOOK_URL: ${{ secrets.INCIDENT_IO_WEBHOOK_URL }}
+      INCIDENT_IO_WEBHOOK_TOKEN: ${{ secrets.INCIDENT_IO_WEBHOOK_TOKEN }}
