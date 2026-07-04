@@ -84,7 +84,7 @@ if (hasApiKey()) {
       FILES: evidence.commit.files.map((f) => `${f.status} ${f.filename}`).slice(0, 200).join('\n') || '(unavailable)',
       HEALTH: JSON.stringify(evidence.health),
     });
-    evidence.ai_summary = await askModel({ user, maxTokens: 1000 });
+    evidence.ai_summary = await askModel({ user, maxTokens: 3000 });
   } catch (err) {
     evidence.ai_summary = `AI summary failed: ${String(err.message || err).slice(0, 200)}`;
   }

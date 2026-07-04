@@ -117,10 +117,11 @@ if (hasApiKey()) {
       CATEGORIES: [...matched.values()].map((c) => c.name).join(', ') || 'none matched',
       DIFF: diff,
     });
-    const answer = await askModel({ user, maxTokens: 1200 });
+    const answer = await askModel({ user, maxTokens: 4000 });
     ai = extractJson(answer);
     if (!ai) {
-      aiNote = '_AI reviewer returned an unparseable response; deterministic classification above still applies._';
+      const excerpt = String(answer).replace(/[`\n]/g, ' ').slice(0, 200);
+      aiNote = `_AI reviewer returned an unparseable response (excerpt: "${excerpt}"); deterministic classification above still applies._`;
     }
   } catch (err) {
     aiNote = `_AI review failed (${String(err.message || err).slice(0, 200)}); deterministic classification above still applies._`;

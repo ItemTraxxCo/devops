@@ -64,7 +64,7 @@ if (hasApiKey()) {
       OWNERSHIP: ownership.area,
       LOGS: logs,
     });
-    const answer = await askModel({ user, maxTokens: 1200 });
+    const answer = await askModel({ user, maxTokens: 4000 });
     aiSection = `### AI analysis\n\n${answer}`;
   } catch (err) {
     aiSection = `### AI analysis\n\n_AI triage failed (${String(err.message || err).slice(0, 200)}); deterministic triage above still applies._`;

@@ -77,13 +77,16 @@ export async function askModel({ system, user, model, maxTokens = 1500, timeoutM
       },
       body: {
         model: resolvedModel,
-        max_tokens: maxTokens,
+        // Reasoning models (Nemotron) spend output tokens on thinking before
+        // the answer; keep a floor so the answer itself never gets truncated.
+        max_tokens: Math.max(maxTokens, 4096),
         temperature: 0.2,
         messages,
       },
       timeoutMs,
     });
-    return String(data?.choices?.[0]?.message?.content ?? '').trim();
+    const raw = String(data?.choices?.[0]?.message?.content ?? '');
+    return raw.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
   }
 
   const data = await fetchJson(ANTHROPIC_URL, {
