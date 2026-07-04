@@ -58,7 +58,7 @@ Without it, every spoke call fails with "workflow was not found".
 ## Design decisions
 
 - **Graceful AI degradation:** no hub workflow fails because
-  `ANTHROPIC_API_KEY` is missing; AI output is additive.
+  `AI_API_KEY` is missing; AI output is additive.
 - **Untrusted input discipline:** PR titles/bodies/logs only flow through
   files and `env:` variables, never interpolated into `run:` scripts.
 - **Numeric input validation:** `run_id`/`pr_number` are regex-validated

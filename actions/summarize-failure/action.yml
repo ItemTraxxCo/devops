@@ -1,7 +1,7 @@
 name: Summarize Failure
 description: >-
   Deterministic ownership classification plus optional AI root-cause triage
-  for a failed workflow run. Degrades gracefully when no ANTHROPIC_API_KEY
+  for a failed workflow run. Degrades gracefully when no AI_API_KEY
   is provided.
 
 inputs:
@@ -14,8 +14,8 @@ inputs:
   output_path:
     description: Where to write the triage markdown.
     required: true
-  anthropic_api_key:
-    description: Anthropic API key. Optional; without it only deterministic triage runs.
+  ai_api_key:
+    description: AI provider API key (NVIDIA NIM or Anthropic). Optional; without it only deterministic triage runs.
     required: false
     default: ""
 
@@ -25,7 +25,7 @@ runs:
     - name: Run failure triage
       shell: bash
       env:
-        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        AI_API_KEY: ${{ inputs.ai_api_key }}
         LOGS_PATH: ${{ inputs.logs_path }}
         CONTEXT_PATH: ${{ inputs.context_path }}
         OUTPUT_PATH: ${{ inputs.output_path }}

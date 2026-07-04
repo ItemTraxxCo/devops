@@ -8,13 +8,13 @@
  *                      workflow_name, branch, sha, failed_jobs[]} (required)
  *   OUTPUT_PATH        triage markdown destination (required)
  *   PROMPT_PATH        prompt template override (optional)
- *   ANTHROPIC_API_KEY  enables AI analysis (optional)
+ *   AI_API_KEY         enables AI analysis (optional; NVIDIA NIM or Anthropic)
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { askClaude, hasApiKey, renderPrompt } from './anthropic-client.mjs';
+import { askModel, hasApiKey, renderPrompt } from './llm-client.mjs';
 import { classifyOwnership } from '../alerts/ownership.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -64,13 +64,13 @@ if (hasApiKey()) {
       OWNERSHIP: ownership.area,
       LOGS: logs,
     });
-    const answer = await askClaude({ user, maxTokens: 1200 });
+    const answer = await askModel({ user, maxTokens: 1200 });
     aiSection = `### AI analysis\n\n${answer}`;
   } catch (err) {
     aiSection = `### AI analysis\n\n_AI triage failed (${String(err.message || err).slice(0, 200)}); deterministic triage above still applies._`;
   }
 } else {
-  aiSection = '### AI analysis\n\n_Skipped: ANTHROPIC_API_KEY is not configured for this repository._';
+  aiSection = '### AI analysis\n\n_Skipped: AI_API_KEY is not configured for this repository._';
 }
 lines.push(aiSection);
 lines.push('');

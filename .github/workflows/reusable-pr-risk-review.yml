@@ -20,7 +20,7 @@ on:
         type: boolean
         default: true
     secrets:
-      ANTHROPIC_API_KEY:
+      AI_API_KEY:
         required: false
 
 jobs:
@@ -69,7 +69,7 @@ jobs:
           files_json_path: ${{ steps.collect.outputs.workdir }}/files.json
           diff_path: ${{ steps.collect.outputs.workdir }}/diff.patch
           output_dir: ${{ steps.collect.outputs.workdir }}
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          ai_api_key: ${{ secrets.AI_API_KEY }}
 
       - name: Upsert PR comment and labels
         env:

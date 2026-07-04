@@ -35,12 +35,12 @@ docs/
 | `reusable-incident-alert.yml` | incident.io alert-source webhook event |
 | `reusable-kill-switch-preflight.yml` | Checks ItemTraxx kill switch; outputs `active` + `message` |
 | `reusable-ci-triage.yml` | On workflow failure: pulls failing job logs, deterministic ownership classification, optional AI root-cause triage, optional Slack post |
-| `reusable-pr-risk-review.yml` | Classifies PR risk (auth / tenant-boundary / edge-ingress / legal / deploy-config / frontend-only), labels the PR, upserts a review comment; AI narrative when `ANTHROPIC_API_KEY` is present |
+| `reusable-pr-risk-review.yml` | Classifies PR risk (auth / tenant-boundary / edge-ingress / legal / deploy-config / frontend-only), labels the PR, upserts a review comment; AI narrative when `AI_API_KEY` is present |
 | `reusable-deploy-evidence.yml` | After a deploy: collects commit + run + health-probe evidence into an artifact bundle, optional AI deploy-impact summary |
 | `reusable-synthetic-probes.yml` | Runs config-driven synthetic HTTP probes (kill-switch aware) |
 | `reusable-dependency-promotion.yml` | Labels Dependabot patch/minor PRs as `safe-merge-candidate`; optional auto-merge |
 
-All AI features degrade gracefully: without `ANTHROPIC_API_KEY` the workflows
+All AI features degrade gracefully: without `AI_API_KEY` the workflows
 fall back to deterministic output and never fail the caller for a missing key.
 
 ## Calling from a spoke repo
@@ -53,7 +53,7 @@ jobs:
       run_id: ${{ github.event.workflow_run.id }}
       workflow_name: ${{ github.event.workflow_run.name }}
     secrets:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AI_API_KEY: ${{ secrets.AI_API_KEY }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 ```
 
@@ -68,7 +68,7 @@ Settings → Actions → General → Access →
 | `SLACK_WEBHOOK_URL` | failure/status notify, ci-triage | optional |
 | `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID` | status notify (threaded updates) | optional |
 | `INCIDENT_IO_WEBHOOK_URL` / `INCIDENT_IO_WEBHOOK_TOKEN` | incident alerts | optional |
-| `ANTHROPIC_API_KEY` | ci-triage, pr-risk-review, deploy-evidence AI summaries | optional |
+| `AI_API_KEY` | ci-triage, pr-risk-review, deploy-evidence AI summaries | optional |
 
 See [docs/runbooks/secrets.md](docs/runbooks/secrets.md) for the full matrix.
 

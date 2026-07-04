@@ -34,7 +34,7 @@ on:
         type: string
         default: https://itemtraxx.com
     secrets:
-      ANTHROPIC_API_KEY:
+      AI_API_KEY:
         required: false
 
 jobs:
@@ -104,7 +104,7 @@ jobs:
           sha: ${{ inputs.sha }}
           workflow_name: ${{ inputs.workflow_name }}
           surfaces: ${{ inputs.surfaces }}
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          ai_api_key: ${{ secrets.AI_API_KEY }}
 
       - name: Publish evidence summary
         env:

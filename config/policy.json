@@ -1,9 +1,20 @@
 {
   "ai": {
-    "default_model": "claude-sonnet-5",
+    "providers": {
+      "nvidia": {
+        "default_model": "nvidia/nemotron-3-ultra-550b-a55b",
+        "key_prefix": "nvapi-",
+        "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions"
+      },
+      "anthropic": {
+        "default_model": "claude-sonnet-5",
+        "endpoint": "https://api.anthropic.com/v1/messages"
+      }
+    },
+    "provider_env_override": "ITX_AI_PROVIDER",
     "model_env_override": "ITX_AI_MODEL",
     "max_tokens": 1500,
-    "graceful_degradation": "All AI features skip cleanly when ANTHROPIC_API_KEY is absent."
+    "graceful_degradation": "All AI features skip cleanly when AI_API_KEY is absent."
   },
   "labels": {
     "risk_prefix": "risk:",

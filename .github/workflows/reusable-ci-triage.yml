@@ -25,7 +25,7 @@ on:
         type: string
         default: "3"
     secrets:
-      ANTHROPIC_API_KEY:
+      AI_API_KEY:
         required: false
       SLACK_WEBHOOK_URL:
         required: false
@@ -94,7 +94,7 @@ jobs:
           logs_path: ${{ steps.collect.outputs.workdir }}/logs.txt
           context_path: ${{ steps.collect.outputs.workdir }}/context.json
           output_path: ${{ steps.collect.outputs.workdir }}/triage.md
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          ai_api_key: ${{ secrets.AI_API_KEY }}
 
       - name: Publish triage summary
         env:

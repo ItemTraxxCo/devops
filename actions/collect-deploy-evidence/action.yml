@@ -25,8 +25,8 @@ inputs:
     description: Comma-separated deploy surfaces.
     required: false
     default: unknown
-  anthropic_api_key:
-    description: Anthropic API key. Optional; without it the bundle omits the AI impact summary.
+  ai_api_key:
+    description: AI provider API key (NVIDIA NIM or Anthropic). Optional; without it the bundle omits the AI impact summary.
     required: false
     default: ""
 
@@ -36,7 +36,7 @@ runs:
     - name: Build evidence bundle
       shell: bash
       env:
-        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        AI_API_KEY: ${{ inputs.ai_api_key }}
         WORKDIR: ${{ inputs.workdir }}
         REPOSITORY: ${{ inputs.repository }}
         RUN_ID: ${{ inputs.run_id }}

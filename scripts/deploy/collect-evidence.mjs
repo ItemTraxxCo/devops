@@ -11,13 +11,13 @@
  *   WORKFLOW_NAME      deploy workflow name (optional)
  *   SURFACES           comma-separated deploy surfaces (optional)
  *   PROMPT_PATH        prompt template override (optional)
- *   ANTHROPIC_API_KEY  enables AI impact summary (optional)
+ *   AI_API_KEY         enables AI impact summary (optional; NVIDIA NIM or Anthropic)
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { askClaude, hasApiKey, renderPrompt } from '../ai/anthropic-client.mjs';
+import { askModel, hasApiKey, renderPrompt } from '../ai/llm-client.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -84,7 +84,7 @@ if (hasApiKey()) {
       FILES: evidence.commit.files.map((f) => `${f.status} ${f.filename}`).slice(0, 200).join('\n') || '(unavailable)',
       HEALTH: JSON.stringify(evidence.health),
     });
-    evidence.ai_summary = await askClaude({ user, maxTokens: 1000 });
+    evidence.ai_summary = await askModel({ user, maxTokens: 1000 });
   } catch (err) {
     evidence.ai_summary = `AI summary failed: ${String(err.message || err).slice(0, 200)}`;
   }
@@ -126,7 +126,7 @@ if (evidence.ai_summary) {
   md.push(evidence.ai_summary);
   md.push('');
 } else {
-  md.push('_AI impact summary skipped: ANTHROPIC_API_KEY is not configured for this repository._');
+  md.push('_AI impact summary skipped: AI_API_KEY is not configured for this repository._');
   md.push('');
 }
 

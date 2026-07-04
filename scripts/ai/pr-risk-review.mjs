@@ -10,13 +10,13 @@
  *   DIFF_PATH          truncated unified diff (required)
  *   OUTPUT_DIR         destination for comment.md + labels.txt (required)
  *   PROMPT_PATH        prompt template override (optional)
- *   ANTHROPIC_API_KEY  enables AI narrative (optional)
+ *   AI_API_KEY         enables AI narrative (optional; NVIDIA NIM or Anthropic)
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { askClaude, extractJson, hasApiKey, renderPrompt } from './anthropic-client.mjs';
+import { askModel, extractJson, hasApiKey, renderPrompt } from './llm-client.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MARKER = '<!-- itx-pr-risk-review -->';
@@ -117,7 +117,7 @@ if (hasApiKey()) {
       CATEGORIES: [...matched.values()].map((c) => c.name).join(', ') || 'none matched',
       DIFF: diff,
     });
-    const answer = await askClaude({ user, maxTokens: 1200 });
+    const answer = await askModel({ user, maxTokens: 1200 });
     ai = extractJson(answer);
     if (!ai) {
       aiNote = '_AI reviewer returned an unparseable response; deterministic classification above still applies._';
@@ -126,7 +126,7 @@ if (hasApiKey()) {
     aiNote = `_AI review failed (${String(err.message || err).slice(0, 200)}); deterministic classification above still applies._`;
   }
 } else {
-  aiNote = '_AI narrative skipped: ANTHROPIC_API_KEY is not configured for this repository._';
+  aiNote = '_AI narrative skipped: AI_API_KEY is not configured for this repository._';
 }
 
 const lines = [];

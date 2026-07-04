@@ -11,7 +11,7 @@ workflow fires (`workflow_run` trigger) and calls
    (`scripts/alerts/ownership.mjs`): Cloudflare Worker, Supabase Functions,
    Vite app, E2E, env/config drift, kill-switch state, security tooling, or
    database.
-3. If `ANTHROPIC_API_KEY` is configured, asks the model for a root-cause
+3. If `AI_API_KEY` is configured, asks the model for a root-cause
    hypothesis, files to inspect, and a flaky-vs-real verdict
    (`prompts/workflow-failure-triage.md`).
 4. Publishes the triage to the run's step summary, uploads it as an artifact

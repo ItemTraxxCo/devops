@@ -17,8 +17,8 @@ inputs:
   output_dir:
     description: Directory to write comment.md and labels.txt into.
     required: true
-  anthropic_api_key:
-    description: Anthropic API key. Optional; without it only deterministic classification runs.
+  ai_api_key:
+    description: AI provider API key (NVIDIA NIM or Anthropic). Optional; without it only deterministic classification runs.
     required: false
     default: ""
 
@@ -28,7 +28,7 @@ runs:
     - name: Run PR risk review
       shell: bash
       env:
-        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        AI_API_KEY: ${{ inputs.ai_api_key }}
         PR_JSON_PATH: ${{ inputs.pr_json_path }}
         FILES_JSON_PATH: ${{ inputs.files_json_path }}
         DIFF_PATH: ${{ inputs.diff_path }}

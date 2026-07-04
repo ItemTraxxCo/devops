@@ -13,24 +13,36 @@ are optional at the hub level — features degrade instead of failing.
 | `SLACK_CHANNEL_ID` | spoke repo | notify-status | Falls back to webhook |
 | `INCIDENT_IO_WEBHOOK_URL` | spoke repo | incident-alert | Alert step logs and skips |
 | `INCIDENT_IO_WEBHOOK_TOKEN` | spoke repo | incident-alert | Alert step logs and skips |
-| `ANTHROPIC_API_KEY` | spoke repo or org level | ci-triage, pr-risk-review, deploy-evidence | AI sections replaced with a "skipped" note; deterministic output still produced |
+| `AI_API_KEY` | spoke repo or org level | ci-triage, pr-risk-review, deploy-evidence | AI sections replaced with a "skipped" note; deterministic output still produced |
 
-## Adding `ANTHROPIC_API_KEY`
+## Adding `AI_API_KEY`
 
-1. Create an API key at console.anthropic.com (scope: Messages API only).
-2. Add as an **org-level Actions secret** in ItemTraxxCo (preferred, visible to
-   private repos) or as a repo secret on `itemtraxx-code`.
-3. No workflow changes needed — AI features activate on the next run.
-4. Model default is `claude-sonnet-5`; override per-repo with an
-   `ITX_AI_MODEL` Actions variable if cost tuning is needed.
+The hub auto-detects the provider from the key:
+
+- **NVIDIA NIM** — key starts with `nvapi-` (from an NVIDIA developer
+  account at build.nvidia.com). Default model:
+  `nvidia/nemotron-3-ultra-550b-a55b`, called via the OpenAI-compatible
+  endpoint `https://integrate.api.nvidia.com/v1/chat/completions`.
+- **Anthropic** — any other key (console.anthropic.com). Default model:
+  `claude-sonnet-5`.
+
+Setup:
+
+1. Add the key as an **org-level Actions secret** named `AI_API_KEY` in
+   ItemTraxxCo (preferred) or as a repo secret on the spoke repo.
+2. No workflow changes needed — AI features activate on the next run.
+3. Overrides via Actions **variables** (not secrets) on the spoke repo:
+   `ITX_AI_MODEL` for the model id, `ITX_AI_PROVIDER` (`nvidia` |
+   `anthropic`) to force a provider when key-prefix detection is wrong.
 
 ## Rotation
 
 - Slack/incident.io secrets: rotate at the provider, update the repo secret;
   no hub change required.
-- Anthropic key: rotate at console.anthropic.com, update the secret. Failed AI
-  calls never fail workflows — a stale key shows up as "AI triage failed" notes
-  in triage summaries.
+- AI key: rotate at the provider (build.nvidia.com for `nvapi-` keys,
+  console.anthropic.com for Anthropic), update the secret. Failed AI calls
+  never fail workflows — a stale key shows up as "AI triage failed" notes in
+  triage summaries.
 
 ## Dependabot caveat
 
