@@ -1,21 +1,22 @@
 name: Collect Deploy Evidence
 description: >-
-  Builds a deploy evidence bundle (evidence.json + evidence.md) from run,
-  commit, and health data already collected into the workdir. Optional AI
-  deploy-impact summary when an Anthropic key is provided.
+  Self-contained deploy evidence bundle: collects run, commit, and
+  post-deploy health data, builds evidence.json + evidence.md, publishes a
+  step summary, and uploads a 90-day artifact. Optional AI deploy-impact
+  summary when an AI key is provided.
 
 inputs:
-  workdir:
-    description: Directory containing run.json, commit.json, and health.json.
+  run_id:
+    description: ID of the completed deploy workflow run.
     required: true
   repository:
     description: owner/repo of the deployed repository.
     required: true
-  run_id:
-    description: Deploy workflow run ID.
-    required: true
   sha:
     description: Deployed commit SHA.
+    required: true
+  github_token:
+    description: Token with actions:read and contents:read on the repository.
     required: true
   workflow_name:
     description: Deploy workflow name.
@@ -25,19 +26,78 @@ inputs:
     description: Comma-separated deploy surfaces.
     required: false
     default: unknown
+  health_url:
+    description: Health endpoint probed as part of the evidence bundle.
+    required: false
+    default: https://edge.itemtraxx.com/functions/system-status
+  origin:
+    description: Origin header for the health probe.
+    required: false
+    default: https://itemtraxx.com
   ai_api_key:
-    description: AI provider API key (NVIDIA NIM or Anthropic). Optional; without it the bundle omits the AI impact summary.
+    description: AI provider API key (NVIDIA NIM or Anthropic). Optional.
     required: false
     default: ""
 
 runs:
   using: composite
   steps:
+    - name: Collect run, commit, and health data
+      id: collect
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        RUN_ID: ${{ inputs.run_id }}
+        SHA: ${{ inputs.sha }}
+        REPOSITORY: ${{ inputs.repository }}
+        HEALTH_URL: ${{ inputs.health_url }}
+        ORIGIN: ${{ inputs.origin }}
+      run: |
+        set -euo pipefail
+
+        if ! printf '%s' "$RUN_ID" | grep -Eq '^[0-9]+$'; then
+          echo "run_id must be numeric, got: $RUN_ID"
+          exit 1
+        fi
+        if ! printf '%s' "$SHA" | grep -Eq '^[0-9a-fA-F]{7,40}$'; then
+          echo "sha must be a commit hash, got: $SHA"
+          exit 1
+        fi
+
+        WORKDIR="$(mktemp -d)"
+        echo "workdir=$WORKDIR" >> "$GITHUB_OUTPUT"
+
+        gh api "repos/${REPOSITORY}/actions/runs/${RUN_ID}" \
+          | jq '{id, name, html_url, status, conclusion, run_started_at, updated_at, head_branch, head_sha}' \
+          > "$WORKDIR/run.json"
+
+        gh api "repos/${REPOSITORY}/commits/${SHA}" \
+          | jq '{sha, commit: {message: .commit.message, author: .commit.author.name, date: .commit.author.date}, files: [.files[]? | {filename, status, additions, deletions}]}' \
+          > "$WORKDIR/commit.json"
+
+        HEALTH_BODY="$(mktemp)"
+        set +e
+        HEALTH_STATUS="$(curl -sS -o "$HEALTH_BODY" -w '%{http_code}' \
+          --connect-timeout 5 --max-time 15 \
+          --retry 2 --retry-delay 2 --retry-all-errors \
+          -H "Accept: application/json" \
+          -H "Origin: ${ORIGIN}" \
+          "$HEALTH_URL")"
+        HEALTH_EC="$?"
+        set -e
+        jq -n \
+          --arg url "$HEALTH_URL" \
+          --arg status "$HEALTH_STATUS" \
+          --arg curl_exit "$HEALTH_EC" \
+          --arg body "$(head -c 500 "$HEALTH_BODY" | tr -d '\000')" \
+          '{url: $url, http_status: $status, curl_exit: $curl_exit, body_excerpt: $body}' \
+          > "$WORKDIR/health.json"
+
     - name: Build evidence bundle
       shell: bash
       env:
         AI_API_KEY: ${{ inputs.ai_api_key }}
-        WORKDIR: ${{ inputs.workdir }}
+        WORKDIR: ${{ steps.collect.outputs.workdir }}
         REPOSITORY: ${{ inputs.repository }}
         RUN_ID: ${{ inputs.run_id }}
         SHA: ${{ inputs.sha }}
@@ -47,3 +107,13 @@ runs:
       run: |
         set -euo pipefail
         node "$ACTION_PATH/../../scripts/deploy/collect-evidence.mjs"
+        cat "$WORKDIR/evidence.md" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload evidence artifact
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: deploy-evidence-${{ inputs.run_id }}
+        path: |
+          ${{ steps.collect.outputs.workdir }}/evidence.json
+          ${{ steps.collect.outputs.workdir }}/evidence.md
+        retention-days: 90

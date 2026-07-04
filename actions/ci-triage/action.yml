@@ -1,0 +1,139 @@
+name: CI Triage
+description: >-
+  Self-contained CI failure triage: pulls failed job logs for a workflow run,
+  classifies the likely ownership area, optionally adds AI root-cause
+  analysis, publishes a step summary, uploads an artifact, and optionally
+  posts to Slack. Degrades gracefully without an AI key or Slack webhook.
+
+inputs:
+  run_id:
+    description: ID of the failed workflow run to triage.
+    required: true
+  repository:
+    description: owner/repo containing the run.
+    required: true
+  github_token:
+    description: Token with actions:read on the repository.
+    required: true
+  ai_api_key:
+    description: AI provider API key (NVIDIA NIM or Anthropic). Optional.
+    required: false
+    default: ""
+  slack_webhook_url:
+    description: Slack incoming webhook for the triage summary. Optional.
+    required: false
+    default: ""
+  send_slack:
+    description: Post the triage summary to Slack when a webhook is configured.
+    required: false
+    default: "true"
+  max_failed_jobs:
+    description: Maximum number of failed jobs to pull logs for.
+    required: false
+    default: "3"
+
+runs:
+  using: composite
+  steps:
+    - name: Collect failed job logs
+      id: collect
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        RUN_ID: ${{ inputs.run_id }}
+        REPOSITORY: ${{ inputs.repository }}
+        MAX_FAILED_JOBS: ${{ inputs.max_failed_jobs }}
+      run: |
+        set -euo pipefail
+
+        if ! printf '%s' "$RUN_ID" | grep -Eq '^[0-9]+$'; then
+          echo "run_id must be numeric, got: $RUN_ID"
+          exit 1
+        fi
+
+        WORKDIR="$(mktemp -d)"
+        echo "workdir=$WORKDIR" >> "$GITHUB_OUTPUT"
+
+        gh api "repos/${REPOSITORY}/actions/runs/${RUN_ID}" > "$WORKDIR/run.json"
+        gh api "repos/${REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100" --paginate \
+          | jq -s '{jobs: (map(.jobs) | add)}' > "$WORKDIR/jobs.json"
+
+        jq -r '.jobs[] | select(.conclusion == "failure") | "\(.id)\t\(.name)"' "$WORKDIR/jobs.json" \
+          | head -n "$MAX_FAILED_JOBS" > "$WORKDIR/failed-jobs.tsv"
+
+        : > "$WORKDIR/logs.txt"
+        if [ ! -s "$WORKDIR/failed-jobs.tsv" ]; then
+          echo "No failed jobs found in run ${RUN_ID}." | tee -a "$WORKDIR/logs.txt"
+        else
+          while IFS=$'\t' read -r JOB_ID JOB_NAME; do
+            {
+              echo "===== FAILED JOB: ${JOB_NAME} (id ${JOB_ID}) ====="
+              gh api "repos/${REPOSITORY}/actions/jobs/${JOB_ID}/logs" 2>/dev/null | tail -c 30000 || echo "(log fetch failed)"
+              echo
+            } >> "$WORKDIR/logs.txt"
+          done < "$WORKDIR/failed-jobs.tsv"
+        fi
+
+        jq -n \
+          --arg repository "$REPOSITORY" \
+          --arg run_id "$RUN_ID" \
+          --arg run_url "$(jq -r '.html_url // empty' "$WORKDIR/run.json")" \
+          --arg workflow_name "$(jq -r '.name // "unknown"' "$WORKDIR/run.json")" \
+          --arg branch "$(jq -r '.head_branch // "unknown"' "$WORKDIR/run.json")" \
+          --arg sha "$(jq -r '.head_sha // "unknown"' "$WORKDIR/run.json")" \
+          --argjson failed_jobs "$(jq '[.jobs[] | select(.conclusion == "failure") | .name]' "$WORKDIR/jobs.json")" \
+          '{repository: $repository, run_id: $run_id, run_url: $run_url, workflow_name: $workflow_name, branch: $branch, sha: $sha, failed_jobs: $failed_jobs}' \
+          > "$WORKDIR/context.json"
+
+    - name: Summarize failure
+      shell: bash
+      env:
+        AI_API_KEY: ${{ inputs.ai_api_key }}
+        LOGS_PATH: ${{ steps.collect.outputs.workdir }}/logs.txt
+        CONTEXT_PATH: ${{ steps.collect.outputs.workdir }}/context.json
+        OUTPUT_PATH: ${{ steps.collect.outputs.workdir }}/triage.md
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        node "$ACTION_PATH/../../scripts/ai/triage-failure.mjs"
+        cat "$OUTPUT_PATH" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload triage artifact
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: ci-triage-${{ inputs.run_id }}
+        path: |
+          ${{ steps.collect.outputs.workdir }}/triage.md
+          ${{ steps.collect.outputs.workdir }}/context.json
+        retention-days: 14
+
+    - name: Post triage to Slack
+      if: ${{ inputs.send_slack == 'true' }}
+      shell: bash
+      env:
+        SLACK_WEBHOOK_URL: ${{ inputs.slack_webhook_url }}
+        WORKDIR: ${{ steps.collect.outputs.workdir }}
+      run: |
+        set -euo pipefail
+        if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
+          echo "slack_webhook_url is not configured; skipping Slack triage post."
+          exit 0
+        fi
+        RUN_URL="$(jq -r '.run_url // empty' "$WORKDIR/context.json")"
+        WORKFLOW_NAME="$(jq -r '.workflow_name // "unknown"' "$WORKDIR/context.json")"
+        SUMMARY="$(head -c 2800 "$WORKDIR/triage.md")"
+        PAYLOAD="$(jq -n \
+          --arg workflow "$WORKFLOW_NAME" \
+          --arg run_url "$RUN_URL" \
+          --arg summary "$SUMMARY" \
+          '{
+            text: (":mag: CI triage for failed workflow " + $workflow),
+            blocks: [
+              { type: "header", text: { type: "plain_text", text: ":mag: CI failure triage" } },
+              { type: "section", text: { type: "mrkdwn", text: ("*Workflow:* " + $workflow + "\n*Run:* <" + $run_url + "|Open failing run>") } },
+              { type: "section", text: { type: "mrkdwn", text: $summary } }
+            ]
+          }')"
+        curl -fsSL -X POST "$SLACK_WEBHOOK_URL" \
+          -H "Content-Type: application/json" \
+          --data "$PAYLOAD"

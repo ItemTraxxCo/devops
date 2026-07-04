@@ -1,0 +1,97 @@
+name: Dependabot Promotion
+description: >-
+  Labels Dependabot patch/minor updates as safe-merge-candidate; optional
+  auto-merge. Reads only Dependabot metadata — never checks out or executes
+  PR code.
+
+inputs:
+  pr_number:
+    description: Dependabot pull request number.
+    required: true
+  repository:
+    description: owner/repo containing the pull request.
+    required: true
+  github_token:
+    description: Token with pull-requests:write and issues:write on the repository.
+    required: true
+  enable_automerge:
+    description: Enable GitHub auto-merge (squash) for safe candidates.
+    required: false
+    default: "false"
+  allowed_update_types:
+    description: Comma-separated semver update types that qualify as safe.
+    required: false
+    default: "version-update:semver-patch,version-update:semver-minor"
+
+runs:
+  using: composite
+  steps:
+    - name: Fetch Dependabot metadata
+      id: metadata
+      uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # v2
+      with:
+        github-token: ${{ inputs.github_token }}
+
+    - name: Evaluate promotion
+      id: evaluate
+      shell: bash
+      env:
+        UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+        DEPENDENCY_TYPE: ${{ steps.metadata.outputs.dependency-type }}
+        DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
+        ALLOWED_UPDATE_TYPES: ${{ inputs.allowed_update_types }}
+      run: |
+        set -euo pipefail
+
+        SAFE="false"
+        IFS=',' read -ra ALLOWED <<< "$ALLOWED_UPDATE_TYPES"
+        for T in "${ALLOWED[@]}"; do
+          if [ "$UPDATE_TYPE" = "$(printf '%s' "$T" | xargs)" ]; then
+            SAFE="true"
+            break
+          fi
+        done
+
+        echo "Update type: $UPDATE_TYPE (dependency type: $DEPENDENCY_TYPE, names: $DEPENDENCY_NAMES)"
+        echo "safe=$SAFE" >> "$GITHUB_OUTPUT"
+
+    - name: Label safe merge candidate
+      if: ${{ steps.evaluate.outputs.safe == 'true' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        PR_NUMBER: ${{ inputs.pr_number }}
+        REPOSITORY: ${{ inputs.repository }}
+      run: |
+        set -euo pipefail
+        if ! printf '%s' "$PR_NUMBER" | grep -Eq '^[0-9]+$'; then
+          echo "pr_number must be numeric, got: $PR_NUMBER"
+          exit 1
+        fi
+        gh api -X POST "repos/${REPOSITORY}/labels" \
+          -f name="safe-merge-candidate" -f color="0e8a16" \
+          -f description="Dependabot patch/minor update that passed the promotion gate" \
+          > /dev/null 2>&1 || true
+        gh api -X POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/labels" \
+          -f "labels[]=safe-merge-candidate" > /dev/null
+        echo "Labeled PR #${PR_NUMBER} as safe-merge-candidate."
+
+    - name: Enable auto-merge
+      if: ${{ steps.evaluate.outputs.safe == 'true' && inputs.enable_automerge == 'true' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        PR_NUMBER: ${{ inputs.pr_number }}
+        REPOSITORY: ${{ inputs.repository }}
+      run: |
+        set -euo pipefail
+        gh pr merge "$PR_NUMBER" --repo "$REPOSITORY" --auto --squash
+        echo "Auto-merge enabled for PR #${PR_NUMBER}; it merges only after all required checks pass."
+
+    - name: Report unsafe update
+      if: ${{ steps.evaluate.outputs.safe != 'true' }}
+      shell: bash
+      env:
+        UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+      run: |
+        echo "Update type '$UPDATE_TYPE' is not in the safe promotion set; leaving PR for manual review."

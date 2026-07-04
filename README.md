@@ -45,20 +45,44 @@ fall back to deterministic output and never fail the caller for a missing key.
 
 ## Calling from a spoke repo
 
+**Public spokes (ItemTraxx-App)** cannot call private reusable workflows —
+they check the hub out with a read-only PAT and use the composite actions:
+
+```yaml
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ItemTraxxCo/devops
+          token: ${{ secrets.DEVOPS_HUB_TOKEN }}
+          path: devops-hub
+          persist-credentials: false
+      - uses: ./devops-hub/actions/ci-triage
+        with:
+          run_id: ${{ github.event.workflow_run.id }}
+          repository: ${{ github.repository }}
+          github_token: ${{ github.token }}
+          ai_api_key: ${{ secrets.AI_API_KEY }}
+          slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+```
+
+**Private spokes** can use the reusable workflow wrappers directly:
+
 ```yaml
 jobs:
   triage:
     uses: ItemTraxxCo/devops/.github/workflows/reusable-ci-triage.yml@main
     with:
-      run_id: ${{ github.event.workflow_run.id }}
-      workflow_name: ${{ github.event.workflow_run.name }}
+      run_id: ${{ format('{0}', github.event.workflow_run.id) }}
     secrets:
       AI_API_KEY: ${{ secrets.AI_API_KEY }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 ```
 
-This repo must remain accessible to org repositories:
-Settings → Actions → General → Access →
+For the private-spoke path this repo must remain accessible to org
+repositories: Settings → Actions → General → Access →
 "Accessible from repositories in the ItemTraxxCo organization".
 
 ## Secrets consumed (provided by callers)

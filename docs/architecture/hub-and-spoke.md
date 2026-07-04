@@ -23,27 +23,44 @@ workflows but must not be implemented here.
 
 ## Wiring
 
+**Constraint:** this hub is PRIVATE and `ItemTraxxCo/ItemTraxx-App` is
+PUBLIC. GitHub forbids public repos from calling reusable workflows or
+actions that live in private repos (`uses: ItemTraxxCo/devops/...@main`
+fails at run startup with zero jobs). Two integration paths exist:
+
+**Public spokes (ItemTraxx-App) — PAT checkout:**
+
 ```
-itemtraxx-code workflow (thin)
-  └─ uses: ItemTraxxCo/devops/.github/workflows/reusable-*.yml@main
-       └─ uses: ItemTraxxCo/devops/actions/<composite>@main
-            └─ node scripts/<area>/<script>.mjs  (whole repo ships with the action)
+spoke workflow (thin)
+  ├─ guard step: skip everything if DEVOPS_HUB_TOKEN is unset
+  ├─ actions/checkout  repository: ItemTraxxCo/devops
+  │                    token: secrets.DEVOPS_HUB_TOKEN  path: devops-hub
+  └─ uses: ./devops-hub/actions/<composite>
+       └─ node scripts/<area>/<script>.mjs  (resolved via github.action_path)
 ```
 
-- Hub-internal references pin `@main` deliberately: main is the release
-  channel, one place to fix bugs, immediately live everywhere.
-- GitHub allows 4 levels of nested workflows. Deepest current chain:
-  spoke caller (1) → spoke shim (2) → hub reusable (3) → hub incident-alert (4).
-  Do not add another nesting level; use composite actions instead.
-- Composite actions receive the full repo checkout at `github.action_path`,
-  which is how `scripts/` and `prompts/` and `config/` travel with them —
-  no cross-repo checkout token needed.
+`DEVOPS_HUB_TOKEN` is a fine-grained PAT with **Contents: Read** on
+`ItemTraxxCo/devops` only. See runbooks/secrets.md.
+
+**Private spokes (future) — workflow_call:**
+
+```
+spoke workflow (thin)
+  └─ uses: ItemTraxxCo/devops/.github/workflows/reusable-*.yml@main
+       └─ uses: ItemTraxxCo/devops/actions/<composite>@main
+```
+
+All logic lives in the **composite actions** (single source of truth); the
+reusable workflows are thin wrappers over them. Hub-internal references pin
+`@main` deliberately: main is the release channel, one place to fix bugs,
+immediately live everywhere.
 
 ## Access
 
-This repo must stay: Settings → Actions → General → Access →
+For private-spoke workflow_call to work, this repo must stay:
+Settings → Actions → General → Access →
 "Accessible from repositories in the ItemTraxxCo organization".
-Without it, every spoke call fails with "workflow was not found".
+This setting does NOT help public spokes — only the PAT checkout path does.
 
 ## Onboarding a new spoke repo
 

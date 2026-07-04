@@ -1,39 +1,116 @@
 name: PR Risk Review
 description: >-
-  Classifies a pull request into ItemTraxx risk categories from changed file
-  paths, with an optional AI narrative when an Anthropic key is provided.
-  Writes comment.md and labels.txt into the output directory.
+  Self-contained PR risk review: collects PR metadata and diff, classifies
+  the change into ItemTraxx risk categories, applies risk:* labels, and
+  upserts a single review comment. Optional AI narrative when an AI key is
+  provided; degrades gracefully without one.
 
 inputs:
-  pr_json_path:
-    description: Path to the PR metadata JSON (number, title, body, base, head).
+  pr_number:
+    description: Pull request number to review.
     required: true
-  files_json_path:
-    description: Path to the changed-files JSON array.
+  repository:
+    description: owner/repo containing the pull request.
     required: true
-  diff_path:
-    description: Path to the (truncated) unified diff.
-    required: true
-  output_dir:
-    description: Directory to write comment.md and labels.txt into.
+  github_token:
+    description: Token with pull-requests:write and issues:write on the repository.
     required: true
   ai_api_key:
-    description: AI provider API key (NVIDIA NIM or Anthropic). Optional; without it only deterministic classification runs.
+    description: AI provider API key (NVIDIA NIM or Anthropic). Optional.
     required: false
     default: ""
+  apply_labels:
+    description: Apply risk:* labels to the PR.
+    required: false
+    default: "true"
+  max_diff_bytes:
+    description: Maximum diff bytes to send to the AI reviewer.
+    required: false
+    default: "300000"
 
 runs:
   using: composite
   steps:
-    - name: Run PR risk review
+    - name: Collect PR metadata and diff
+      id: collect
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        PR_NUMBER: ${{ inputs.pr_number }}
+        REPOSITORY: ${{ inputs.repository }}
+        MAX_DIFF_BYTES: ${{ inputs.max_diff_bytes }}
+      run: |
+        set -euo pipefail
+
+        if ! printf '%s' "$PR_NUMBER" | grep -Eq '^[0-9]+$'; then
+          echo "pr_number must be numeric, got: $PR_NUMBER"
+          exit 1
+        fi
+
+        WORKDIR="$(mktemp -d)"
+        echo "workdir=$WORKDIR" >> "$GITHUB_OUTPUT"
+
+        gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}" \
+          | jq '{number, title, body, base: .base.ref, head: .head.ref, additions, deletions, changed_files}' \
+          > "$WORKDIR/pr.json"
+
+        gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100" --paginate \
+          | jq -s 'add | map({filename, status, additions, deletions})' \
+          > "$WORKDIR/files.json"
+
+        gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}" \
+          -H "Accept: application/vnd.github.v3.diff" \
+          | head -c "$MAX_DIFF_BYTES" > "$WORKDIR/diff.patch" || true
+
+    - name: Run risk classification
       shell: bash
       env:
         AI_API_KEY: ${{ inputs.ai_api_key }}
-        PR_JSON_PATH: ${{ inputs.pr_json_path }}
-        FILES_JSON_PATH: ${{ inputs.files_json_path }}
-        DIFF_PATH: ${{ inputs.diff_path }}
-        OUTPUT_DIR: ${{ inputs.output_dir }}
+        PR_JSON_PATH: ${{ steps.collect.outputs.workdir }}/pr.json
+        FILES_JSON_PATH: ${{ steps.collect.outputs.workdir }}/files.json
+        DIFF_PATH: ${{ steps.collect.outputs.workdir }}/diff.patch
+        OUTPUT_DIR: ${{ steps.collect.outputs.workdir }}
         ACTION_PATH: ${{ github.action_path }}
       run: |
         set -euo pipefail
         node "$ACTION_PATH/../../scripts/ai/pr-risk-review.mjs"
+        cat "$OUTPUT_DIR/comment.md" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upsert PR comment and labels
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        PR_NUMBER: ${{ inputs.pr_number }}
+        REPOSITORY: ${{ inputs.repository }}
+        APPLY_LABELS: ${{ inputs.apply_labels }}
+        WORKDIR: ${{ steps.collect.outputs.workdir }}
+      run: |
+        set -euo pipefail
+
+        BODY_FILE="$WORKDIR/comment.md"
+
+        EXISTING_ID="$(gh api "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" --paginate \
+          | jq -s 'add | map(select(.body | contains("<!-- itx-pr-risk-review -->"))) | (first // {}) | .id // empty' -r)"
+
+        if [ -n "$EXISTING_ID" ]; then
+          gh api -X PATCH "repos/${REPOSITORY}/issues/comments/${EXISTING_ID}" \
+            -F body=@"$BODY_FILE" > /dev/null
+          echo "Updated existing risk review comment ${EXISTING_ID}."
+        else
+          gh api -X POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            -F body=@"$BODY_FILE" > /dev/null
+          echo "Created risk review comment."
+        fi
+
+        if [ "$APPLY_LABELS" = "true" ] && [ -s "$WORKDIR/labels.txt" ]; then
+          while IFS= read -r LABEL; do
+            [ -z "$LABEL" ] && continue
+            gh api -X POST "repos/${REPOSITORY}/labels" \
+              -f name="$LABEL" -f color="d93f0b" \
+              -f description="ItemTraxx PR risk classification" \
+              > /dev/null 2>&1 || true
+            gh api -X POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/labels" \
+              -f "labels[]=$LABEL" > /dev/null
+            echo "Applied label: $LABEL"
+          done < "$WORKDIR/labels.txt"
+        fi

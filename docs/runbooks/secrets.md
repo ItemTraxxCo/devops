@@ -14,6 +14,25 @@ are optional at the hub level — features degrade instead of failing.
 | `INCIDENT_IO_WEBHOOK_URL` | spoke repo | incident-alert | Alert step logs and skips |
 | `INCIDENT_IO_WEBHOOK_TOKEN` | spoke repo | incident-alert | Alert step logs and skips |
 | `AI_API_KEY` | spoke repo or org level | ci-triage, pr-risk-review, deploy-evidence | AI sections replaced with a "skipped" note; deterministic output still produced |
+| `DEVOPS_HUB_TOKEN` | spoke repo (public spokes only) | every hub-integration workflow (checks out this private repo) | Guard step skips the whole hub job with a log message |
+
+## Adding `DEVOPS_HUB_TOKEN`
+
+Required because `ItemTraxx-App` is public and this hub is private — the
+spoke must check the hub out with a token instead of using `workflow_call`.
+
+1. Create a **fine-grained PAT** (github.com → Settings → Developer settings
+   → Fine-grained tokens): resource owner `ItemTraxxCo`, repository access
+   **only `ItemTraxxCo/devops`**, permissions **Contents: Read-only**.
+   Nothing else.
+2. Add it to `ItemTraxx-App` as an **Actions secret** named
+   `DEVOPS_HUB_TOKEN` (Settings → Secrets and variables → Actions).
+3. Also add it as a **Dependabot secret** with the same name (Settings →
+   Secrets and variables → Dependabot) — workflows triggered by Dependabot
+   read from the Dependabot secrets store, and the promotion workflow needs
+   the hub checkout too.
+4. Set a calendar reminder for the PAT expiry; rotation is: create new
+   token, update both secrets, revoke old token.
 
 ## Adding `AI_API_KEY`
 

@@ -1,5 +1,9 @@
 name: Reusable Deploy Evidence
 
+# Thin wrapper over actions/collect-deploy-evidence for private spoke repos
+# that can use workflow_call. Public spokes check out this repo with
+# DEVOPS_HUB_TOKEN and use the composite action directly.
+
 permissions: {}
 
 on:
@@ -45,79 +49,15 @@ jobs:
       actions: read
       contents: read
     steps:
-      - name: Collect run, commit, and health data
-        id: collect
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ inputs.run_id }}
-          SHA: ${{ inputs.sha }}
-          REPOSITORY: ${{ github.repository }}
-          HEALTH_URL: ${{ inputs.health_url }}
-          ORIGIN: ${{ inputs.origin }}
-        run: |
-          set -euo pipefail
-
-          if ! printf '%s' "$RUN_ID" | grep -Eq '^[0-9]+$'; then
-            echo "run_id must be numeric, got: $RUN_ID"
-            exit 1
-          fi
-          if ! printf '%s' "$SHA" | grep -Eq '^[0-9a-fA-F]{7,40}$'; then
-            echo "sha must be a commit hash, got: $SHA"
-            exit 1
-          fi
-
-          WORKDIR="$(mktemp -d)"
-          echo "workdir=$WORKDIR" >> "$GITHUB_OUTPUT"
-
-          gh api "repos/${REPOSITORY}/actions/runs/${RUN_ID}" \
-            | jq '{id, name, html_url, status, conclusion, run_started_at, updated_at, head_branch, head_sha}' \
-            > "$WORKDIR/run.json"
-
-          gh api "repos/${REPOSITORY}/commits/${SHA}" \
-            | jq '{sha, commit: {message: .commit.message, author: .commit.author.name, date: .commit.author.date}, files: [.files[]? | {filename, status, additions, deletions}]}' \
-            > "$WORKDIR/commit.json"
-
-          HEALTH_BODY="$(mktemp)"
-          set +e
-          HEALTH_STATUS="$(curl -sS -o "$HEALTH_BODY" -w '%{http_code}' \
-            --connect-timeout 5 --max-time 15 \
-            --retry 2 --retry-delay 2 --retry-all-errors \
-            -H "Accept: application/json" \
-            -H "Origin: ${ORIGIN}" \
-            "$HEALTH_URL")"
-          HEALTH_EC="$?"
-          set -e
-          jq -n \
-            --arg url "$HEALTH_URL" \
-            --arg status "$HEALTH_STATUS" \
-            --arg curl_exit "$HEALTH_EC" \
-            --arg body "$(head -c 500 "$HEALTH_BODY" | tr -d '\000')" \
-            '{url: $url, http_status: $status, curl_exit: $curl_exit, body_excerpt: $body}' \
-            > "$WORKDIR/health.json"
-
-      - name: Build evidence bundle
+      - name: Build deploy evidence bundle
         uses: ItemTraxxCo/devops/actions/collect-deploy-evidence@main
         with:
-          workdir: ${{ steps.collect.outputs.workdir }}
-          repository: ${{ github.repository }}
           run_id: ${{ inputs.run_id }}
+          repository: ${{ github.repository }}
           sha: ${{ inputs.sha }}
+          github_token: ${{ github.token }}
           workflow_name: ${{ inputs.workflow_name }}
           surfaces: ${{ inputs.surfaces }}
+          health_url: ${{ inputs.health_url }}
+          origin: ${{ inputs.origin }}
           ai_api_key: ${{ secrets.AI_API_KEY }}
-
-      - name: Publish evidence summary
-        env:
-          WORKDIR: ${{ steps.collect.outputs.workdir }}
-        run: |
-          set -euo pipefail
-          cat "$WORKDIR/evidence.md" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload evidence artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: deploy-evidence-${{ inputs.run_id }}
-          path: |
-            ${{ steps.collect.outputs.workdir }}/evidence.json
-            ${{ steps.collect.outputs.workdir }}/evidence.md
-          retention-days: 90
