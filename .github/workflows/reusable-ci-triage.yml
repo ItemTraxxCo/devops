@@ -1,9 +1,8 @@
 name: Reusable CI Triage
 
-# Thin wrapper over actions/ci-triage for private spoke repos that can use
-# workflow_call. Public spokes cannot call private reusable workflows —
-# they check out this repo with DEVOPS_HUB_TOKEN and use the composite
-# action directly (see docs/architecture/hub-and-spoke.md).
+# Thin wrapper over actions/ci-triage for spokes that prefer
+# workflow_call. ItemTraxx-App checks this public repo out and uses the
+# composite action directly (see docs/architecture/hub-and-spoke.md).
 
 permissions: {}
 

@@ -45,8 +45,8 @@ fall back to deterministic output and never fail the caller for a missing key.
 
 ## Calling from a spoke repo
 
-**Public spokes (ItemTraxx-App)** cannot call private reusable workflows —
-they check the hub out with a read-only PAT and use the composite actions:
+This repo is **public**, so any spoke can check it out and use the
+composite actions (the pattern ItemTraxx-App uses):
 
 ```yaml
 jobs:
@@ -56,7 +56,6 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ItemTraxxCo/devops
-          token: ${{ secrets.DEVOPS_HUB_TOKEN }}
           path: devops-hub
           persist-credentials: false
       - uses: ./devops-hub/actions/ci-triage
@@ -68,7 +67,7 @@ jobs:
           slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 ```
 
-**Private spokes** can use the reusable workflow wrappers directly:
+Spokes can also use the reusable workflow wrappers directly:
 
 ```yaml
 jobs:

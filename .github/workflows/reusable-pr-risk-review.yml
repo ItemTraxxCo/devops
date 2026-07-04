@@ -1,8 +1,8 @@
 name: Reusable PR Risk Review
 
-# Thin wrapper over actions/pr-risk-review for private spoke repos that can
-# use workflow_call. Public spokes check out this repo with
-# DEVOPS_HUB_TOKEN and use the composite action directly.
+# Thin wrapper over actions/pr-risk-review for spokes that prefer
+# workflow_call. ItemTraxx-App checks this public repo out and uses the
+# composite action directly.
 
 permissions: {}
 

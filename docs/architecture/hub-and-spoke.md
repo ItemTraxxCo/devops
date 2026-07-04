@@ -23,26 +23,22 @@ workflows but must not be implemented here.
 
 ## Wiring
 
-**Constraint:** this hub is PRIVATE and `ItemTraxxCo/ItemTraxx-App` is
-PUBLIC. GitHub forbids public repos from calling reusable workflows or
-actions that live in private repos (`uses: ItemTraxxCo/devops/...@main`
-fails at run startup with zero jobs). Two integration paths exist:
+**History:** this hub started private, but `ItemTraxxCo/ItemTraxx-App` is
+public and GitHub forbids public repos from calling reusable workflows or
+actions in private repos (fails at run startup with zero jobs). The hub was
+made **public** on 2026-07-04 — it contains no secrets, and the app repo's
+source was already public. Secret scanning + push protection are enabled.
 
-**Public spokes (ItemTraxx-App) — PAT checkout:**
+**Checkout integration (ItemTraxx-App uses this):**
 
 ```
 spoke workflow (thin)
-  ├─ guard step: skip everything if DEVOPS_HUB_TOKEN is unset
-  ├─ actions/checkout  repository: ItemTraxxCo/devops
-  │                    token: secrets.DEVOPS_HUB_TOKEN  path: devops-hub
+  ├─ actions/checkout  repository: ItemTraxxCo/devops  path: devops-hub
   └─ uses: ./devops-hub/actions/<composite>
        └─ node scripts/<area>/<script>.mjs  (resolved via github.action_path)
 ```
 
-`DEVOPS_HUB_TOKEN` is a fine-grained PAT with **Contents: Read** on
-`ItemTraxxCo/devops` only. See runbooks/secrets.md.
-
-**Private spokes (future) — workflow_call:**
+**workflow_call (also available now the hub is public):**
 
 ```
 spoke workflow (thin)
@@ -57,10 +53,8 @@ immediately live everywhere.
 
 ## Access
 
-For private-spoke workflow_call to work, this repo must stay:
-Settings → Actions → General → Access →
-"Accessible from repositories in the ItemTraxxCo organization".
-This setting does NOT help public spokes — only the PAT checkout path does.
+The repo is public, so both integration paths work without any access
+setting or token.
 
 ## Onboarding a new spoke repo
 
