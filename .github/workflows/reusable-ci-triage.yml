@@ -2,7 +2,8 @@ name: Reusable CI Triage
 
 # Thin wrapper over actions/ci-triage for spokes that prefer
 # workflow_call. ItemTraxx-App checks this public repo out and uses the
-# composite action directly (see docs/architecture/hub-and-spoke.md).
+# composite action directly. Hub docs live in the private internal-docs repo
+# under docs/devops/architecture/hub-and-spoke.md.
 
 permissions: {}
 

@@ -3,6 +3,8 @@
 Private automation hub for the ItemTraxxCo organization. This repo owns the
 **orchestration layer**: reusable GitHub Actions workflows, composite actions,
 shared scripts, AI prompt packs, shared policy, and org runbooks.
+Internal hub documentation and runbooks live in the private
+`ItemTraxxCo/itemtraxx-internal-docs` repository under `docs/devops/`.
 
 App repos (spokes) keep thin workflow entrypoints that call the reusable
 workflows here via `workflow_call`. Source-aware checks (edge contract drift,
@@ -21,9 +23,6 @@ scripts/
   probes/            Config-driven synthetic HTTP probe runner
 prompts/             AI prompt templates (PR risk, failure triage, deploy impact)
 config/              Shared policy + default probe configs
-docs/
-  runbooks/          Incident / deploy / kill-switch / secrets runbooks
-  architecture/      Hub-and-spoke design notes
 ```
 
 ## Reusable workflows
@@ -96,7 +95,9 @@ repositories: Settings → Actions → General → Access →
 | `INCIDENT_IO_WEBHOOK_URL` / `INCIDENT_IO_WEBHOOK_TOKEN` | incident alerts | optional |
 | `AI_API_KEY` | ci-triage, pr-risk-review, deploy-evidence AI summaries | optional |
 
-See [docs/runbooks/secrets.md](docs/runbooks/secrets.md) for the full matrix.
+See the private internal docs repo at
+`ItemTraxxCo/itemtraxx-internal-docs/docs/devops/runbooks/secrets.md` for the
+full matrix.
 
 ## Versioning
 
