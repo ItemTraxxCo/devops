@@ -37,7 +37,7 @@ jobs:
       issues: write
     steps:
       - name: Run PR risk review
-        uses: ItemTraxxCo/devops/actions/pr-risk-review@main
+        uses: ./actions/pr-risk-review
         with:
           pr_number: ${{ inputs.pr_number }}
           repository: ${{ github.repository }}

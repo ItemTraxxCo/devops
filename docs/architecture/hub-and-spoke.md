@@ -42,19 +42,22 @@ spoke workflow (thin)
 
 ```
 spoke workflow (thin)
-  └─ uses: ItemTraxxCo/devops/.github/workflows/reusable-*.yml@main
-       └─ uses: ItemTraxxCo/devops/actions/<composite>@main
+  └─ uses: ItemTraxxCo/devops/.github/workflows/reusable-*.yml@<full-commit-sha>
+       └─ local action resolution happens inside the pinned reusable workflow
 ```
 
 All logic lives in the **composite actions** (single source of truth); the
-reusable workflows are thin wrappers over them. Hub-internal references pin
-`@main` deliberately: main is the release channel, one place to fix bugs,
-immediately live everywhere.
+reusable workflows are thin wrappers over them. Hub-internal workflow calls use
+local relative paths, and spoke repos consume the reusable workflows through a
+pinned commit SHA.
 
 ## Access
 
 The repo is public, so both integration paths work without any access
 setting or token.
+
+Spoke repos should always pin this hub to a full commit SHA. Do not use
+mutable refs such as `@main` for production workflows.
 
 ## Onboarding a new spoke repo
 

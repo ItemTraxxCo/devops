@@ -31,6 +31,31 @@ function requireEnv(name) {
   return value;
 }
 
+function sanitizeText(value, maxLength = 2000) {
+  return String(value ?? '')
+    .replace(/\r/g, '')
+    .replace(/\u0000/g, '')
+    .slice(0, maxLength);
+}
+
+function sanitizeList(values, maxItems = 6, maxLength = 200) {
+  if (!Array.isArray(values)) return [];
+  return values
+    .map((value) => sanitizeText(value, maxLength))
+    .filter(Boolean)
+    .slice(0, maxItems);
+}
+
+function sanitizeAiReview(value) {
+  if (!value || typeof value !== 'object') return null;
+  return {
+    overall_risk: sanitizeText(value.overall_risk || 'unknown', 32),
+    summary: sanitizeText(value.summary || '', 1000),
+    review_focus: sanitizeList(value.review_focus),
+    missing_tests: sanitizeList(value.missing_tests),
+  };
+}
+
 const pr = JSON.parse(readFileSync(requireEnv('PR_JSON_PATH'), 'utf8'));
 const files = JSON.parse(readFileSync(requireEnv('FILES_JSON_PATH'), 'utf8'));
 const diff = readFileSync(requireEnv('DIFF_PATH'), 'utf8').slice(0, MAX_DIFF_CHARS);
@@ -118,13 +143,13 @@ if (hasApiKey()) {
       DIFF: diff,
     });
     const answer = await askModel({ user, maxTokens: 4000 });
-    ai = extractJson(answer);
+    ai = sanitizeAiReview(extractJson(answer));
     if (!ai) {
-      const excerpt = String(answer).replace(/[`\n]/g, ' ').slice(0, 200);
+      const excerpt = sanitizeText(answer, 200).replace(/[`\n]/g, ' ');
       aiNote = `_AI reviewer returned an unparseable response (excerpt: "${excerpt}"); deterministic classification above still applies._`;
     }
   } catch (err) {
-    aiNote = `_AI review failed (${String(err.message || err).slice(0, 200)}); deterministic classification above still applies._`;
+    aiNote = `_AI review failed (${sanitizeText(err.message || err, 200)}); deterministic classification above still applies._`;
   }
 } else {
   aiNote = '_AI narrative skipped: AI_API_KEY is not configured for this repository._';
@@ -151,7 +176,7 @@ if (ai) {
   lines.push(`**Overall risk (AI):** ${ai.overall_risk || 'unknown'}`);
   lines.push('');
   if (ai.summary) {
-    lines.push(String(ai.summary));
+    lines.push(sanitizeText(ai.summary, 1000));
     lines.push('');
   }
   if (Array.isArray(ai.review_focus) && ai.review_focus.length > 0) {

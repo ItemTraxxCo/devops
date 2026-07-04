@@ -72,13 +72,16 @@ Spokes can also use the reusable workflow wrappers directly:
 ```yaml
 jobs:
   triage:
-    uses: ItemTraxxCo/devops/.github/workflows/reusable-ci-triage.yml@main
+    uses: ItemTraxxCo/devops/.github/workflows/reusable-ci-triage.yml@4685d5bf81e6311b8a9c09e71d83e1e544ca5fdb
     with:
       run_id: ${{ format('{0}', github.event.workflow_run.id) }}
     secrets:
       AI_API_KEY: ${{ secrets.AI_API_KEY }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 ```
+
+Pin reusable workflows and actions to a full commit SHA in spoke repos. Do not
+consume this hub via a mutable branch ref such as `@main`.
 
 For the private-spoke path this repo must remain accessible to org
 repositories: Settings → Actions → General → Access →
@@ -97,6 +100,6 @@ See [docs/runbooks/secrets.md](docs/runbooks/secrets.md) for the full matrix.
 
 ## Versioning
 
-Spokes reference `@main`. Treat `main` as the release channel: every merge to
-`main` is immediately live for all callers. Hub CI (`hub-ci.yml`) lints all
-workflows with actionlint and syntax-checks all scripts on every push/PR.
+Spokes should reference a pinned commit SHA. Update the pinned SHA as part of a
+normal hub rollout after validation. Hub CI (`hub-ci.yml`) lints all workflows
+with actionlint and syntax-checks all scripts on every push/PR.

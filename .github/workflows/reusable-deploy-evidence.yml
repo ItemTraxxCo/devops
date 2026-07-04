@@ -50,7 +50,7 @@ jobs:
       contents: read
     steps:
       - name: Build deploy evidence bundle
-        uses: ItemTraxxCo/devops/actions/collect-deploy-evidence@main
+        uses: ./actions/collect-deploy-evidence
         with:
           run_id: ${{ inputs.run_id }}
           repository: ${{ github.repository }}

@@ -43,7 +43,7 @@ jobs:
       contents: read
     steps:
       - name: Run CI triage
-        uses: ItemTraxxCo/devops/actions/ci-triage@main
+        uses: ./actions/ci-triage
         with:
           run_id: ${{ inputs.run_id }}
           repository: ${{ github.repository }}

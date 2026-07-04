@@ -26,6 +26,6 @@ jobs:
     steps:
       - name: Run synthetic probes
         id: run
-        uses: ItemTraxxCo/devops/actions/run-probes@main
+        uses: ./actions/run-probes
         with:
           probes_config: ${{ inputs.probes_config }}

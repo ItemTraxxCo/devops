@@ -161,7 +161,7 @@ jobs:
     needs:
       - notify_start
     if: ${{ always() && inputs.incident_alerts_enabled && inputs.mode == 'start' && (needs.notify_start.result == 'failure' || needs.notify_start.result == 'cancelled') }}
-    uses: ItemTraxxCo/devops/.github/workflows/reusable-incident-alert.yml@main
+    uses: ./.github/workflows/reusable-incident-alert.yml
     with:
       status: ${{ needs.notify_start.result }}
       severity: high
@@ -284,7 +284,7 @@ jobs:
     needs:
       - notify_finish
     if: ${{ always() && inputs.incident_alerts_enabled && inputs.mode == 'finish' && (needs.notify_finish.result == 'failure' || needs.notify_finish.result == 'cancelled') }}
-    uses: ItemTraxxCo/devops/.github/workflows/reusable-incident-alert.yml@main
+    uses: ./.github/workflows/reusable-incident-alert.yml
     with:
       status: ${{ needs.notify_finish.result }}
       severity: high

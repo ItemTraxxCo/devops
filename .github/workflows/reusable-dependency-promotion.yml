@@ -35,7 +35,7 @@ jobs:
       issues: write
     steps:
       - name: Run dependency promotion
-        uses: ItemTraxxCo/devops/actions/dependabot-promotion@main
+        uses: ./actions/dependabot-promotion
         with:
           pr_number: ${{ inputs.pr_number }}
           repository: ${{ github.repository }}

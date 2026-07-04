@@ -29,6 +29,13 @@ function requireEnv(name) {
   return value;
 }
 
+function sanitizeText(value, maxLength = 4000) {
+  return String(value ?? '')
+    .replace(/\r/g, '')
+    .replace(/\u0000/g, '')
+    .slice(0, maxLength);
+}
+
 const logsPath = requireEnv('LOGS_PATH');
 const contextPath = requireEnv('CONTEXT_PATH');
 const outputPath = requireEnv('OUTPUT_PATH');
@@ -65,9 +72,9 @@ if (hasApiKey()) {
       LOGS: logs,
     });
     const answer = await askModel({ user, maxTokens: 4000 });
-    aiSection = `### AI analysis\n\n${answer}`;
+    aiSection = `### AI analysis\n\n${sanitizeText(answer, 6000)}`;
   } catch (err) {
-    aiSection = `### AI analysis\n\n_AI triage failed (${String(err.message || err).slice(0, 200)}); deterministic triage above still applies._`;
+    aiSection = `### AI analysis\n\n_AI triage failed (${sanitizeText(err.message || err, 200)}); deterministic triage above still applies._`;
   }
 } else {
   aiSection = '### AI analysis\n\n_Skipped: AI_API_KEY is not configured for this repository._';

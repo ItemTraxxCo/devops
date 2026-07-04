@@ -47,6 +47,89 @@ function loadConfig(argv) {
   return JSON.parse(readFileSync(filePath, 'utf8'));
 }
 
+function normalizeHttpUrl(value, fieldName) {
+  if (typeof value !== 'string') {
+    throw new Error(`${fieldName} must be a string`);
+  }
+  const url = new URL(value);
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new Error(`${fieldName} must use http or https`);
+  }
+  return url.toString();
+}
+
+function normalizeOptionalString(value, fieldName, maxLength = 1024) {
+  if (value == null) return undefined;
+  if (typeof value !== 'string') {
+    throw new Error(`${fieldName} must be a string`);
+  }
+  return value.slice(0, maxLength);
+}
+
+function normalizeHeaders(headers, fieldName) {
+  if (headers == null) return {};
+  if (typeof headers !== 'object' || Array.isArray(headers)) {
+    throw new Error(`${fieldName} must be an object`);
+  }
+  const normalized = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (!/^[A-Za-z0-9-]+$/.test(key)) {
+      throw new Error(`${fieldName} contains an invalid header name`);
+    }
+    if (typeof value !== 'string') {
+      throw new Error(`${fieldName}.${key} must be a string`);
+    }
+    normalized[key] = value.slice(0, 512);
+  }
+  return normalized;
+}
+
+function normalizeExpect(expect, fieldName) {
+  if (expect == null) return undefined;
+  if (typeof expect !== 'object' || Array.isArray(expect)) {
+    throw new Error(`${fieldName} must be an object`);
+  }
+  const normalized = {};
+  if (expect.status !== undefined) {
+    if (!Array.isArray(expect.status) || expect.status.some((status) => !Number.isInteger(status))) {
+      throw new Error(`${fieldName}.status must be an array of integers`);
+    }
+    normalized.status = expect.status;
+  }
+  if (expect.statusRange !== undefined) {
+    if (
+      !Array.isArray(expect.statusRange) ||
+      expect.statusRange.length !== 2 ||
+      expect.statusRange.some((status) => !Number.isInteger(status))
+    ) {
+      throw new Error(`${fieldName}.statusRange must be [min, max]`);
+    }
+    normalized.statusRange = expect.statusRange;
+  }
+  return normalized;
+}
+
+function normalizeConfig(rawConfig) {
+  const probes = Array.isArray(rawConfig?.probes) ? rawConfig.probes : [];
+  return {
+    statusUrl: rawConfig?.statusUrl ? normalizeHttpUrl(rawConfig.statusUrl, 'statusUrl') : undefined,
+    origin: rawConfig?.origin ? normalizeHttpUrl(rawConfig.origin, 'origin') : undefined,
+    probes: probes.map((probe, index) => ({
+      name: normalizeOptionalString(probe?.name, `probes[${index}].name`, 128),
+      url: normalizeHttpUrl(probe?.url, `probes[${index}].url`),
+      method: normalizeOptionalString(probe?.method, `probes[${index}].method`, 16)?.toUpperCase() || 'GET',
+      headers: normalizeHeaders(probe?.headers, `probes[${index}].headers`),
+      body: normalizeOptionalString(probe?.body, `probes[${index}].body`, 4096),
+      expect: normalizeExpect(probe?.expect, `probes[${index}].expect`),
+      bodyContains: normalizeOptionalString(probe?.bodyContains, `probes[${index}].bodyContains`, 256),
+      attempts: Number.isInteger(probe?.attempts) ? probe.attempts : 3,
+      backoffMs: Number.isInteger(probe?.backoffMs) ? probe.backoffMs : 1000,
+      allowKillSwitchSkip: probe?.allowKillSwitchSkip === true,
+      userAgent: normalizeOptionalString(probe?.userAgent, `probes[${index}].userAgent`, 256),
+    })),
+  };
+}
+
 function validateConfig(config) {
   const errors = [];
   if (!Array.isArray(config.probes) || config.probes.length === 0) {
@@ -119,8 +202,10 @@ async function runProbe(probe, config) {
   const attempts = probe.attempts ?? 3;
   let backoff = probe.backoffMs ?? 1000;
   let last = { status: 0, body: '', error: 'not run' };
+  let attemptCount = 0;
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    attemptCount = attempt;
     last = await httpRequest(probe.url, {
       method: probe.method || 'GET',
       headers: {
@@ -153,35 +238,35 @@ async function runProbe(probe, config) {
 
   if (retryable(last.status)) {
     return {
-      name: probe.name,
-      url: probe.url,
-      outcome: 'fail',
-      httpStatus: last.status,
-      attempts,
-      detail: last.error || `HTTP ${last.status} after ${attempts} attempts`,
-    };
+        name: probe.name,
+        url: probe.url,
+        outcome: 'fail',
+        httpStatus: last.status,
+        attempts: attemptCount,
+        detail: last.error || `HTTP ${last.status} after ${attempts} attempts`,
+      };
   }
 
   if (!statusAccepted(last.status, probe.expect)) {
     return {
-      name: probe.name,
-      url: probe.url,
-      outcome: 'fail',
-      httpStatus: last.status,
-      attempts: 1,
-      detail: `HTTP ${last.status} not in expected set ${JSON.stringify(probe.expect ?? { statusRange: [200, 399] })}`,
-    };
+        name: probe.name,
+        url: probe.url,
+        outcome: 'fail',
+        httpStatus: last.status,
+        attempts: attemptCount,
+        detail: `HTTP ${last.status} not in expected set ${JSON.stringify(probe.expect ?? { statusRange: [200, 399] })}`,
+      };
   }
 
   if (probe.bodyContains && !last.body.includes(probe.bodyContains)) {
     return {
-      name: probe.name,
-      url: probe.url,
-      outcome: 'fail',
-      httpStatus: last.status,
-      attempts: 1,
-      detail: `Body does not contain "${probe.bodyContains}"`,
-    };
+        name: probe.name,
+        url: probe.url,
+        outcome: 'fail',
+        httpStatus: last.status,
+        attempts: attemptCount,
+        detail: `Body does not contain "${probe.bodyContains}"`,
+      };
   }
 
   return {
@@ -189,7 +274,7 @@ async function runProbe(probe, config) {
     url: probe.url,
     outcome: 'pass',
     httpStatus: last.status,
-    attempts: 1,
+    attempts: attemptCount,
     detail: 'ok',
   };
 }
@@ -209,7 +294,7 @@ async function main() {
   const argv = process.argv.slice(2);
   const validateOnly = argv.includes('--validate');
 
-  const config = loadConfig(argv.filter((a) => a !== '--validate'));
+  const config = normalizeConfig(loadConfig(argv.filter((a) => a !== '--validate')));
   const errors = validateConfig(config);
   if (errors.length > 0) {
     console.error('Invalid probe config:');

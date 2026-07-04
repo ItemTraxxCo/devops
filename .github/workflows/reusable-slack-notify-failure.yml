@@ -84,7 +84,7 @@ jobs:
     needs:
       - notify
     if: ${{ always() && (needs.notify.result == 'failure' || needs.notify.result == 'cancelled') }}
-    uses: ItemTraxxCo/devops/.github/workflows/reusable-incident-alert.yml@main
+    uses: ./.github/workflows/reusable-incident-alert.yml
     with:
       status: ${{ needs.notify.result }}
       severity: high

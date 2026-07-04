@@ -30,6 +30,35 @@ function requireEnv(name) {
   return value;
 }
 
+function sanitizeText(value, maxLength = 4000) {
+  return String(value ?? '')
+    .replace(/\r/g, '')
+    .replace(/\u0000/g, '')
+    .slice(0, maxLength);
+}
+
+function sanitizeHealth(value) {
+  if (!value || typeof value !== 'object') {
+    return { url: null, http_status: null, curl_exit: null, body_excerpt: '' };
+  }
+  return {
+    url: typeof value.url === 'string' ? value.url : null,
+    http_status: sanitizeText(value.http_status ?? '', 8) || null,
+    curl_exit: sanitizeText(value.curl_exit ?? '', 8) || null,
+    body_excerpt: sanitizeText(value.body_excerpt ?? '', 500),
+  };
+}
+
+function sanitizeCommitFiles(files) {
+  if (!Array.isArray(files)) return [];
+  return files.slice(0, 200).map((file) => ({
+    filename: sanitizeText(file?.filename ?? '', 256),
+    status: sanitizeText(file?.status ?? '', 32),
+    additions: Number.isInteger(file?.additions) ? file.additions : 0,
+    deletions: Number.isInteger(file?.deletions) ? file.deletions : 0,
+  }));
+}
+
 const workdir = requireEnv('WORKDIR');
 const repository = requireEnv('REPOSITORY');
 const runId = requireEnv('RUN_ID');
@@ -48,7 +77,7 @@ function readJson(name) {
 
 const run = readJson('run.json');
 const commit = readJson('commit.json');
-const health = readJson('health.json');
+const health = sanitizeHealth(readJson('health.json'));
 
 const evidence = {
   generated_at: new Date().toISOString(),
@@ -68,9 +97,9 @@ const evidence = {
     message: commit?.commit?.message || null,
     author: commit?.commit?.author || null,
     date: commit?.commit?.date || null,
-    files: commit?.files || [],
+    files: sanitizeCommitFiles(commit?.files),
   },
-  health: health || { url: null, http_status: null },
+  health,
   ai_summary: null,
 };
 
@@ -84,9 +113,9 @@ if (hasApiKey()) {
       FILES: evidence.commit.files.map((f) => `${f.status} ${f.filename}`).slice(0, 200).join('\n') || '(unavailable)',
       HEALTH: JSON.stringify(evidence.health),
     });
-    evidence.ai_summary = await askModel({ user, maxTokens: 3000 });
+    evidence.ai_summary = sanitizeText(await askModel({ user, maxTokens: 3000 }), 6000);
   } catch (err) {
-    evidence.ai_summary = `AI summary failed: ${String(err.message || err).slice(0, 200)}`;
+    evidence.ai_summary = `AI summary failed: ${sanitizeText(err.message || err, 200)}`;
   }
 }
 
@@ -105,7 +134,7 @@ if (evidence.commit.message) {
   md.push('### Commit');
   md.push('');
   md.push('```');
-  md.push(evidence.commit.message.slice(0, 1000));
+  md.push(sanitizeText(evidence.commit.message, 1000));
   md.push('```');
   md.push('');
 }
