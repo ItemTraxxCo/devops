@@ -39,13 +39,12 @@ function sanitizeText(value, maxLength = 4000) {
 
 function sanitizeHealth(value) {
   if (!value || typeof value !== 'object') {
-    return { url: null, http_status: null, curl_exit: null, body_excerpt: '' };
+    return { url: null, http_status: null, curl_exit: null };
   }
   return {
     url: typeof value.url === 'string' ? value.url : null,
     http_status: sanitizeText(value.http_status ?? '', 8) || null,
     curl_exit: sanitizeText(value.curl_exit ?? '', 8) || null,
-    body_excerpt: sanitizeText(value.body_excerpt ?? '', 500),
   };
 }
 
@@ -100,7 +99,7 @@ const evidence = {
     files: sanitizeCommitFiles(commit?.files),
   },
   health,
-  ai_summary: null,
+  ai_summary_present: false,
 };
 
 if (hasApiKey()) {
@@ -113,9 +112,11 @@ if (hasApiKey()) {
       FILES: evidence.commit.files.map((f) => `${f.status} ${f.filename}`).slice(0, 200).join('\n') || '(unavailable)',
       HEALTH: JSON.stringify(evidence.health),
     });
-    evidence.ai_summary = sanitizeText(await askModel({ user, maxTokens: 3000 }), 6000);
+    await askModel({ user, maxTokens: 3000 });
+    evidence.ai_summary_present = true;
   } catch (err) {
-    evidence.ai_summary = `AI summary failed: ${sanitizeText(err.message || err, 200)}`;
+    evidence.ai_summary_present = false;
+    evidence.ai_summary_error = sanitizeText(err.message || err, 200);
   }
 }
 
@@ -149,10 +150,13 @@ if (evidence.commit.files.length > 0) {
   }
   md.push('');
 }
-if (evidence.ai_summary) {
+if (evidence.ai_summary_present) {
   md.push('### Deploy impact summary (AI)');
   md.push('');
-  md.push(evidence.ai_summary);
+  md.push('_AI impact summary executed, but only deterministic deploy evidence is persisted in the artifact output._');
+  md.push('');
+} else if (evidence.ai_summary_error) {
+  md.push(`_AI impact summary failed: ${evidence.ai_summary_error}_`);
   md.push('');
 } else {
   md.push('_AI impact summary skipped: AI_API_KEY is not configured for this repository._');

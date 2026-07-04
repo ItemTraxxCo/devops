@@ -132,6 +132,7 @@ if (frontendOnly) {
 
 let ai = null;
 let aiNote = '';
+let aiUsed = false;
 if (hasApiKey()) {
   try {
     const template = readFileSync(promptPath, 'utf8');
@@ -143,6 +144,7 @@ if (hasApiKey()) {
       DIFF: diff,
     });
     const answer = await askModel({ user, maxTokens: 4000 });
+    aiUsed = true;
     ai = sanitizeAiReview(extractJson(answer));
     if (!ai) {
       const excerpt = sanitizeText(answer, 200).replace(/[`\n]/g, ' ');
@@ -172,27 +174,9 @@ if (matched.size === 0) {
 }
 lines.push('');
 
-if (ai) {
-  lines.push(`**Overall risk (AI):** ${ai.overall_risk || 'unknown'}`);
+if (aiUsed) {
+  lines.push('_AI review executed, but only deterministic classifications are persisted in the PR comment._');
   lines.push('');
-  if (ai.summary) {
-    lines.push(sanitizeText(ai.summary, 1000));
-    lines.push('');
-  }
-  if (Array.isArray(ai.review_focus) && ai.review_focus.length > 0) {
-    lines.push('**Review focus:**');
-    for (const item of ai.review_focus.slice(0, 6)) {
-      lines.push(`- ${item}`);
-    }
-    lines.push('');
-  }
-  if (Array.isArray(ai.missing_tests) && ai.missing_tests.length > 0) {
-    lines.push('**Possibly missing tests:**');
-    for (const item of ai.missing_tests.slice(0, 6)) {
-      lines.push(`- ${item}`);
-    }
-    lines.push('');
-  }
 } else if (aiNote) {
   lines.push(aiNote);
   lines.push('');
