@@ -29,6 +29,11 @@ on:
         required: false
         type: string
         default: "3"
+      hub_ref:
+        description: DevOps hub ref to checkout before running the local action.
+        required: false
+        type: string
+        default: main
     secrets:
       AI_API_KEY:
         required: false
@@ -43,6 +48,13 @@ jobs:
       actions: read
       contents: read
     steps:
+      - name: Checkout devops hub
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ItemTraxxCo/devops
+          ref: ${{ inputs.hub_ref }}
+          persist-credentials: false
+
       - name: Run CI triage
         uses: ./actions/ci-triage
         with:
