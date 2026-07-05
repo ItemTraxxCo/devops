@@ -31,6 +31,7 @@
       "url": "https://edge.itemtraxx.com/functions/system-status",
       "headers": { "Accept": "application/json" },
       "expect": { "statusRange": [200, 299] },
+      "retryStatus": [403],
       "bodyContains": "kill_switch",
       "attempts": 6,
       "allowKillSwitchSkip": true

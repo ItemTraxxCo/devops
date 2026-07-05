@@ -22,6 +22,7 @@
  *     "headers": {"Accept": "text/html"},  // optional
  *     "body": "{\"plan\":\"core\"}",       // optional string
  *     "expect": {"status": [200]},          // or {"statusRange": [200, 499]}
+ *     "retryStatus": [403],                 // optional extra statuses to retry
  *     "bodyContains": "kill_switch",        // optional substring assertion
  *     "attempts": 3,                         // default 3
  *     "backoffMs": 1000,                     // default 1000, doubles per retry
@@ -56,6 +57,17 @@ function normalizeHttpUrl(value, fieldName) {
     throw new Error(`${fieldName} must use http or https`);
   }
   return url.toString();
+}
+
+function normalizeOrigin(value, fieldName) {
+  if (typeof value !== 'string') {
+    throw new Error(`${fieldName} must be a string`);
+  }
+  const url = new URL(value);
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new Error(`${fieldName} must use http or https`);
+  }
+  return url.origin;
 }
 
 function normalizeOptionalString(value, fieldName, maxLength = 1024) {
@@ -113,7 +125,7 @@ function normalizeConfig(rawConfig) {
   const probes = Array.isArray(rawConfig?.probes) ? rawConfig.probes : [];
   return {
     statusUrl: rawConfig?.statusUrl ? normalizeHttpUrl(rawConfig.statusUrl, 'statusUrl') : undefined,
-    origin: rawConfig?.origin ? normalizeHttpUrl(rawConfig.origin, 'origin') : undefined,
+    origin: rawConfig?.origin ? normalizeOrigin(rawConfig.origin, 'origin') : undefined,
     probes: probes.map((probe, index) => ({
       name: normalizeOptionalString(probe?.name, `probes[${index}].name`, 128),
       url: normalizeHttpUrl(probe?.url, `probes[${index}].url`),
@@ -121,6 +133,7 @@ function normalizeConfig(rawConfig) {
       headers: normalizeHeaders(probe?.headers, `probes[${index}].headers`),
       body: normalizeOptionalString(probe?.body, `probes[${index}].body`, 4096),
       expect: normalizeExpect(probe?.expect, `probes[${index}].expect`),
+      retryStatus: normalizeStatusList(probe?.retryStatus, `probes[${index}].retryStatus`),
       bodyContains: normalizeOptionalString(probe?.bodyContains, `probes[${index}].bodyContains`, 256),
       attempts: Number.isInteger(probe?.attempts) ? probe.attempts : 3,
       backoffMs: Number.isInteger(probe?.backoffMs) ? probe.backoffMs : 1000,
@@ -128,6 +141,14 @@ function normalizeConfig(rawConfig) {
       userAgent: normalizeOptionalString(probe?.userAgent, `probes[${index}].userAgent`, 256),
     })),
   };
+}
+
+function normalizeStatusList(value, fieldName) {
+  if (value == null) return [];
+  if (!Array.isArray(value) || value.some((status) => !Number.isInteger(status))) {
+    throw new Error(`${fieldName} must be an array of integers`);
+  }
+  return value;
 }
 
 function validateConfig(config) {
@@ -192,8 +213,8 @@ function statusAccepted(status, expect) {
   return status >= 200 && status < 400;
 }
 
-function retryable(status) {
-  return status === 0 || status >= 500;
+function retryable(status, probe) {
+  return status === 0 || status >= 500 || probe.retryStatus.includes(status);
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -217,7 +238,7 @@ async function runProbe(probe, config) {
       body: probe.body,
     });
 
-    if (!retryable(last.status)) break;
+    if (!retryable(last.status, probe)) break;
 
     if (last.status === 503 && probe.allowKillSwitchSkip && (await killSwitchActive(config))) {
       return {
@@ -236,7 +257,7 @@ async function runProbe(probe, config) {
     }
   }
 
-  if (retryable(last.status)) {
+  if (retryable(last.status, probe)) {
     return {
         name: probe.name,
         url: probe.url,
