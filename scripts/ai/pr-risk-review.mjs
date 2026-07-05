@@ -174,9 +174,27 @@ if (matched.size === 0) {
 }
 lines.push('');
 
-if (aiUsed) {
-  lines.push('_AI review executed, but only deterministic classifications are persisted in the PR comment._');
+if (ai) {
+  lines.push(`**Overall risk (AI):** ${ai.overall_risk}`);
   lines.push('');
+  if (ai.summary) {
+    lines.push(ai.summary);
+    lines.push('');
+  }
+  if (ai.review_focus.length > 0) {
+    lines.push('**Review focus:**');
+    for (const item of ai.review_focus.slice(0, 6)) {
+      lines.push(`- ${item}`);
+    }
+    lines.push('');
+  }
+  if (ai.missing_tests.length > 0) {
+    lines.push('**Possibly missing tests:**');
+    for (const item of ai.missing_tests.slice(0, 6)) {
+      lines.push(`- ${item}`);
+    }
+    lines.push('');
+  }
 } else if (aiNote) {
   lines.push(aiNote);
   lines.push('');
