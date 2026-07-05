@@ -12,6 +12,11 @@ on:
         required: false
         type: string
         default: ""
+      hub_ref:
+        description: DevOps hub ref to checkout before running the local action.
+        required: false
+        type: string
+        default: main
     outputs:
       results:
         description: JSON summary of probe results.
@@ -24,6 +29,13 @@ jobs:
     outputs:
       results: ${{ steps.run.outputs.results }}
     steps:
+      - name: Checkout devops hub
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ItemTraxxCo/devops
+          ref: ${{ inputs.hub_ref }}
+          persist-credentials: false
+
       - name: Run synthetic probes
         id: run
         uses: ./actions/run-probes
