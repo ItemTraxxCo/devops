@@ -13,7 +13,7 @@ on:
         type: string
         default: ""
       hub_ref:
-        description: DevOps hub ref to checkout before running the local action.
+        description: Deprecated compatibility input; hub actions are always checked out from the pinned revision.
         required: false
         type: string
         default: main
@@ -33,7 +33,10 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ItemTraxxCo/devops
-          ref: ${{ inputs.hub_ref }}
+          # Do not execute a caller-supplied ref in this workflow: callers can
+          # otherwise select arbitrary action code. Update this SHA only as a
+          # reviewed hub release.
+          ref: 4fd58daee1a0fccde29ffc9c896d07ea21e731ab
           persist-credentials: false
 
       - name: Run synthetic probes
