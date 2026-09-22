@@ -26,6 +26,10 @@ const RULES = [
     pattern: /VITE_[A-Z_]+ is (not set|missing|undefined)|env parity|required-env|missing environment variable/gi,
   },
   {
+    area: 'Cloudflare edge (gateway errors)',
+    pattern: /gateway error|\b50[24]\b (gateway|bad gateway|gateway timeout)|bad gateway|gateway timeout|cf-mitigated|cloudflare challenge/gi,
+  },
+  {
     area: 'Kill-switch state',
     pattern: /kill switch|kill_switch|maintenance mode/gi,
   },

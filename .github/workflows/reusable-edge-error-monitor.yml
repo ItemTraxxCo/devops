@@ -1,0 +1,62 @@
+name: Reusable Edge Gateway-Error Monitor
+
+permissions: {}
+
+on:
+  workflow_call:
+    inputs:
+      window_minutes:
+        description: Lookback window in minutes. Empty uses the hub policy default.
+        required: false
+        type: string
+        default: ""
+      posthog_host:
+        description: PostHog host.
+        required: false
+        type: string
+        default: "https://us.posthog.com"
+    secrets:
+      POSTHOG_API_KEY:
+        description: PostHog personal API key with query:read. Absent skips the monitor.
+        required: false
+      POSTHOG_PROJECT_ID:
+        description: PostHog project id. Absent skips the monitor.
+        required: false
+    outputs:
+      alert:
+        description: "true when the gateway-error threshold was breached."
+        value: ${{ jobs.monitor.outputs.alert }}
+      summary:
+        description: One-line summary of the observed gateway-error rate.
+        value: ${{ jobs.monitor.outputs.summary }}
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      alert: ${{ steps.run.outputs.alert }}
+      summary: ${{ steps.run.outputs.summary }}
+    steps:
+      - name: Checkout devops hub
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ItemTraxxCo/devops
+          # Do not execute a caller-supplied ref in this workflow: callers can
+          # otherwise select arbitrary action code. Update this SHA only as a
+          # reviewed hub release.
+          #
+          # TODO: bump to this change's merge commit before any spoke adopts
+          # this workflow. The SHA below predates actions/edge-error-monitor,
+          # so the monitor step cannot resolve until it is updated.
+          ref: fc9f2c08e50965b0a5fa2db9b57ff367da75f699
+          persist-credentials: false
+
+      - name: Check edge gateway-error rate
+        id: run
+        uses: ./actions/edge-error-monitor
+        with:
+          window_minutes: ${{ inputs.window_minutes }}
+          posthog_host: ${{ inputs.posthog_host }}
+          posthog_api_key: ${{ secrets.POSTHOG_API_KEY }}
+          posthog_project_id: ${{ secrets.POSTHOG_PROJECT_ID }}
