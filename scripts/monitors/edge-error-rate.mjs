@@ -26,6 +26,14 @@
 import { readFileSync, appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
+/**
+ * Log-bridge sources this monitor understands. `bridge_source` is the only
+ * configured string interpolated into HogQL, so it selects a literal from this
+ * list rather than being passed through from the policy file. Adding a source
+ * is a deliberate code change, and file contents never reach the query.
+ */
+const BRIDGE_SOURCES = ['cloudflare_http_requests'];
+
 const DEFAULTS = {
   enabled: true,
   window_minutes: 30,
@@ -60,11 +68,19 @@ export function resolveSettings(policy, overrides = {}) {
   if (!Number.isInteger(settings.min_requests) || settings.min_requests < 1) {
     throw new Error('monitors.edge_error_rate.min_requests must be a positive integer');
   }
-  if (!/^[a-z0-9_]+$/.test(String(settings.bridge_source))) {
-    throw new Error('monitors.edge_error_rate.bridge_source must be a bare identifier');
+  const bridgeSource = BRIDGE_SOURCES.find((source) => source === String(settings.bridge_source));
+  if (!bridgeSource) {
+    throw new Error(
+      `monitors.edge_error_rate.bridge_source must be one of: ${BRIDGE_SOURCES.join(', ')}`,
+    );
   }
 
-  return settings;
+  return {
+    ...settings,
+    window_minutes: Number(settings.window_minutes),
+    statuses: settings.statuses.map((status) => Number(status)),
+    bridge_source: bridgeSource,
+  };
 }
 
 /**
@@ -157,6 +173,29 @@ async function runQuery(query, { host, projectId, apiKey }) {
   return Array.isArray(payload?.results) ? payload.results : [];
 }
 
+/**
+ * Query results are remote data on their way to the step summary and to
+ * GITHUB_OUTPUT. A newline would inject an extra step output and a pipe would
+ * break the summary table, so every cell is flattened to one harmless line.
+ */
+export function sanitizeCell(value) {
+  return String(value ?? '')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replaceAll('|', '\\|')
+    .trim()
+    .slice(0, 200);
+}
+
+export function normalizeBreakdown(rows) {
+  if (!Array.isArray(rows)) return [];
+  return rows.slice(0, 15).map((row) => ({
+    status: sanitizeCell(row?.[0]),
+    zone: sanitizeCell(row?.[1]),
+    path: sanitizeCell(row?.[2]),
+    errors: Number.isFinite(Number(row?.[3])) ? Number(row?.[3]) : 0,
+  }));
+}
+
 export function renderMarkdown(verdict, breakdown, settings) {
   const lines = ['## Edge gateway-error monitor', ''];
   lines.push(
@@ -186,8 +225,8 @@ export function renderMarkdown(verdict, breakdown, settings) {
     lines.push('');
     lines.push('| Status | Zone | Path | Errors |');
     lines.push('| --- | --- | --- | --- |');
-    for (const [status, zone, path, errors] of breakdown) {
-      lines.push(`| ${status} | ${zone} | ${path} | ${errors} |`);
+    for (const row of breakdown) {
+      lines.push(`| ${row.status} | ${row.zone} | ${row.path} | ${row.errors} |`);
     }
   }
 
@@ -196,7 +235,9 @@ export function renderMarkdown(verdict, breakdown, settings) {
 
 function writeOutput(key, value) {
   if (!process.env.GITHUB_OUTPUT) return;
-  appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${value}\n`);
+  // A newline in a value would inject further step outputs.
+  const singleLine = String(value).replace(/[\u0000-\u001f\u007f]/g, ' ');
+  appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${singleLine}\n`);
 }
 
 function parseArgs(argv) {
@@ -254,7 +295,9 @@ async function main() {
   };
 
   const verdict = evaluate(totals, settings);
-  const breakdown = verdict.gatewayErrors > 0 ? await runQuery(buildBreakdownQuery(settings), client) : [];
+  const breakdown = verdict.gatewayErrors > 0
+    ? normalizeBreakdown(await runQuery(buildBreakdownQuery(settings), client))
+    : [];
 
   const markdown = renderMarkdown(verdict, breakdown, settings);
   console.log(markdown);
