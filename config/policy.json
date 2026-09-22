@@ -35,7 +35,8 @@
     "synthetic_probe_failure": "high",
     "deployment_health_failure": "high",
     "ci_failure": "medium",
-    "notification_failure": "high"
+    "notification_failure": "high",
+    "edge_gateway_errors": "high"
   },
   "dependency_promotion": {
     "allowed_update_types": [
@@ -47,6 +48,20 @@
   "notifications": {
     "slack_webhook_secret": "SLACK_WEBHOOK_URL",
     "slack_bot_secrets": ["SLACK_BOT_TOKEN", "SLACK_CHANNEL_ID"],
-    "incident_io_secrets": ["INCIDENT_IO_WEBHOOK_URL", "INCIDENT_IO_WEBHOOK_TOKEN"]
+    "incident_io_secrets": ["INCIDENT_IO_WEBHOOK_URL", "INCIDENT_IO_WEBHOOK_TOKEN"],
+    "posthog_secrets": ["POSTHOG_API_KEY", "POSTHOG_PROJECT_ID"]
+  },
+  "monitors": {
+    "edge_error_rate": {
+      "enabled": true,
+      "window_minutes": 30,
+      "statuses": [502, 504],
+      "min_errors": 10,
+      "min_error_rate": 0.02,
+      "min_requests": 1,
+      "bridge_source": "cloudflare_http_requests",
+      "severity": "high",
+      "rationale": "Cloudflare challenges CI runners before serving edge faults, so synthetic probes cannot see edge 502/504. Read real client outcomes from the log bridge instead. 503 is excluded because the kill switch uses it for intentional maintenance. min_requests makes an empty window an alert: the http_requests feed stopped delivering on 2026-09-14 and the resulting absence of 504s was mistaken for recovery."
+    }
   }
 }

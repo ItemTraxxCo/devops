@@ -29,9 +29,19 @@
  *     "allowKillSwitchSkip": true            // default false
  *   }]
  * }
+ *
+ * Outcomes: `pass`, `fail`, `skipped` (kill switch) and `challenged`.
+ * Cloudflare's managed firewall challenges non-browser clients such as
+ * GitHub-hosted runners, so a challenged probe answered from the edge but
+ * never reached the application: its assertion is unverified, not satisfied.
+ * Challenges do not fail the run — they are the normal case from CI — but they
+ * are reported separately so a run that verified nothing cannot read as a
+ * clean pass. Edge faults that a challenged probe cannot see are covered by
+ * scripts/monitors/edge-error-rate.mjs, which reads real client outcomes.
  */
 
 import { readFileSync, appendFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
 const DEFAULT_UA =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36 ItemTraxxProbe/1.0';
@@ -174,6 +184,7 @@ function validateConfig(config) {
 async function httpRequest(url, { method = 'GET', headers = {}, body, timeoutMs = 15000 }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const startedAt = Date.now();
   try {
     const res = await fetch(url, {
       method,
@@ -183,12 +194,41 @@ async function httpRequest(url, { method = 'GET', headers = {}, body, timeoutMs 
       signal: controller.signal,
     });
     const text = await res.text().catch(() => '');
-    return { status: res.status, body: text.slice(0, 4096), error: null };
+    return {
+      status: res.status,
+      body: text.slice(0, 4096),
+      headers: Object.fromEntries(res.headers),
+      durationMs: Date.now() - startedAt,
+      error: null,
+    };
   } catch (err) {
-    return { status: 0, body: '', error: String(err.message || err) };
+    return {
+      status: 0,
+      body: '',
+      headers: {},
+      durationMs: Date.now() - startedAt,
+      error: String(err.message || err),
+    };
   } finally {
     clearTimeout(timer);
   }
+}
+
+const GATEWAY_STATUSES = [502, 503, 504];
+
+export function cloudflareChallenge(res) {
+  return res?.status === 403 && /challenge/i.test(res?.headers?.['cf-mitigated'] || '');
+}
+
+/**
+ * A gateway error returned in milliseconds was produced by the edge itself;
+ * a genuine upstream timeout takes seconds. Surfacing the elapsed time keeps
+ * that distinction in the alert instead of leaving it to be rediscovered.
+ */
+export function failureDetail(res, attempts) {
+  const base = `HTTP ${res.status} after ${attempts} attempts`;
+  if (!GATEWAY_STATUSES.includes(res.status)) return base;
+  return `${base} (gateway error in ${res.durationMs} ms; a sub-second gateway error means the edge answered without reaching the origin)`;
 }
 
 async function killSwitchActive(config) {
@@ -238,6 +278,9 @@ async function runProbe(probe, config) {
       body: probe.body,
     });
 
+    // Retrying a challenge only burns backoff: it is a stable verdict.
+    if (cloudflareChallenge(last)) break;
+
     if (!retryable(last.status, probe)) break;
 
     if (last.status === 503 && probe.allowKillSwitchSkip && (await killSwitchActive(config))) {
@@ -247,6 +290,7 @@ async function runProbe(probe, config) {
         outcome: 'skipped',
         httpStatus: last.status,
         attempts: attempt,
+        durationMs: last.durationMs,
         detail: 'Kill switch active; intentional maintenance skip.',
       };
     }
@@ -257,6 +301,18 @@ async function runProbe(probe, config) {
     }
   }
 
+  if (cloudflareChallenge(last) && !statusAccepted(last.status, probe.expect)) {
+    return {
+        name: probe.name,
+        url: probe.url,
+        outcome: 'challenged',
+        httpStatus: last.status,
+        attempts: attemptCount,
+        durationMs: last.durationMs,
+        detail: 'Cloudflare challenged this request; the probe assertion was not evaluated.',
+      };
+  }
+
   if (retryable(last.status, probe)) {
     return {
         name: probe.name,
@@ -264,7 +320,8 @@ async function runProbe(probe, config) {
         outcome: 'fail',
         httpStatus: last.status,
         attempts: attemptCount,
-        detail: last.error || `HTTP ${last.status} after ${attempts} attempts`,
+        durationMs: last.durationMs,
+        detail: last.error || failureDetail(last, attempts),
       };
   }
 
@@ -275,6 +332,7 @@ async function runProbe(probe, config) {
         outcome: 'fail',
         httpStatus: last.status,
         attempts: attemptCount,
+        durationMs: last.durationMs,
         detail: `HTTP ${last.status} not in expected set ${JSON.stringify(probe.expect ?? { statusRange: [200, 399] })}`,
       };
   }
@@ -286,6 +344,7 @@ async function runProbe(probe, config) {
         outcome: 'fail',
         httpStatus: last.status,
         attempts: attemptCount,
+        durationMs: last.durationMs,
         detail: `Body does not contain "${probe.bodyContains}"`,
       };
   }
@@ -296,18 +355,38 @@ async function runProbe(probe, config) {
     outcome: 'pass',
     httpStatus: last.status,
     attempts: attemptCount,
+    durationMs: last.durationMs,
     detail: 'ok',
   };
 }
 
 function renderMarkdown(results) {
-  const icon = { pass: '✅', fail: '❌', skipped: '⏭️' };
-  const lines = ['## Synthetic probe results', '', '| Probe | Outcome | HTTP | Detail |', '| --- | --- | --- | --- |'];
+  const icon = { pass: '✅', fail: '❌', skipped: '⏭️', challenged: '🛡️' };
+  const lines = [
+    '## Synthetic probe results',
+    '',
+    '| Probe | Outcome | HTTP | ms | Detail |',
+    '| --- | --- | --- | --- | --- |',
+  ];
   for (const r of results.probes) {
-    lines.push(`| ${r.name} | ${icon[r.outcome] || ''} ${r.outcome} | ${r.httpStatus} | ${r.detail} |`);
+    lines.push(
+      `| ${r.name} | ${icon[r.outcome] || ''} ${r.outcome} | ${r.httpStatus} | ${r.durationMs ?? ''} | ${r.detail} |`,
+    );
   }
   lines.push('');
-  lines.push(`**${results.passed} passed, ${results.failed} failed, ${results.skipped} skipped.**`);
+  lines.push(
+    `**${results.passed} passed, ${results.failed} failed, ${results.skipped} skipped, ${results.challenged} challenged.**`,
+  );
+
+  if (results.passed === 0 && results.challenged > 0) {
+    lines.push('');
+    lines.push(
+      '> ⚠️ Every non-skipped probe was challenged by Cloudflare, so this run verified nothing about edge health. ' +
+        'Treat it as inconclusive rather than green. Edge faults that challenges hide are covered by the edge ' +
+        'gateway-error monitor, which reads real client outcomes from the log bridge.',
+    );
+  }
+
   return lines.join('\n');
 }
 
@@ -331,7 +410,7 @@ async function main() {
   for (const probe of config.probes) {
     console.log(`== probe: ${probe.name} (${probe.url})`);
     const result = await runProbe(probe, config);
-    console.log(`   ${result.outcome} (HTTP ${result.httpStatus}): ${result.detail}`);
+    console.log(`   ${result.outcome} (HTTP ${result.httpStatus}, ${result.durationMs} ms): ${result.detail}`);
     probeResults.push(result);
   }
 
@@ -340,6 +419,7 @@ async function main() {
     passed: probeResults.filter((r) => r.outcome === 'pass').length,
     failed: probeResults.filter((r) => r.outcome === 'fail').length,
     skipped: probeResults.filter((r) => r.outcome === 'skipped').length,
+    challenged: probeResults.filter((r) => r.outcome === 'challenged').length,
     probes: probeResults,
   };
 
@@ -358,4 +438,7 @@ async function main() {
   }
 }
 
-await main();
+// Only run when executed directly, so the classification helpers stay importable.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
+}

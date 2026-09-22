@@ -1,0 +1,55 @@
+name: Edge Gateway-Error Monitor
+description: >-
+  Alerts on Cloudflare edge gateway errors (502/504) observed by real client
+  traffic, read from the log bridge records in PostHog. Covers the blind spot
+  where CI-based synthetic probes are challenged by Cloudflare before the edge
+  would serve the fault.
+
+inputs:
+  window_minutes:
+    description: Lookback window in minutes. Empty uses the hub policy default.
+    required: false
+    default: ""
+  posthog_api_key:
+    description: PostHog personal API key with query:read. Empty skips the monitor.
+    required: false
+    default: ""
+  posthog_project_id:
+    description: PostHog project id. Empty skips the monitor.
+    required: false
+    default: ""
+  posthog_host:
+    description: PostHog host.
+    required: false
+    default: "https://us.posthog.com"
+
+outputs:
+  alert:
+    description: "true when the gateway-error threshold was breached."
+    value: ${{ steps.monitor.outputs.alert }}
+  summary:
+    description: One-line summary of the observed gateway-error rate.
+    value: ${{ steps.monitor.outputs.summary }}
+  results:
+    description: Single-line JSON verdict with the per-path breakdown.
+    value: ${{ steps.monitor.outputs.results }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check edge gateway-error rate
+      id: monitor
+      shell: bash
+      env:
+        WINDOW_MINUTES: ${{ inputs.window_minutes }}
+        POSTHOG_API_KEY: ${{ inputs.posthog_api_key }}
+        POSTHOG_PROJECT_ID: ${{ inputs.posthog_project_id }}
+        POSTHOG_HOST: ${{ inputs.posthog_host }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        ARGS=(--config "$ACTION_PATH/../../config/policy.json")
+        if [ -n "$WINDOW_MINUTES" ]; then
+          ARGS+=(--window-minutes "$WINDOW_MINUTES")
+        fi
+        node "$ACTION_PATH/../../scripts/monitors/edge-error-rate.mjs" "${ARGS[@]}"

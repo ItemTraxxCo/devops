@@ -20,6 +20,7 @@ scripts/
   ai/                Anthropic API client + PR risk review + failure triage
   deploy/            Deploy evidence bundle collection
   alerts/            Deterministic ownership classification for failures
+  monitors/          Telemetry-backed monitors (edge gateway-error rate)
   probes/            Config-driven synthetic HTTP probe runner
 prompts/             AI prompt templates (PR risk, failure triage, deploy impact)
 config/              Shared policy + default probe configs
@@ -37,10 +38,37 @@ config/              Shared policy + default probe configs
 | `reusable-pr-risk-review.yml` | Classifies PR risk (auth / tenant-boundary / edge-ingress / legal / deploy-config / frontend-only), labels the PR, upserts a review comment; AI narrative when `AI_API_KEY` is present |
 | `reusable-deploy-evidence.yml` | After a deploy: collects commit + run + health-probe evidence into an artifact bundle, optional AI deploy-impact summary |
 | `reusable-synthetic-probes.yml` | Runs config-driven synthetic HTTP probes (kill-switch aware) |
+| `reusable-edge-error-monitor.yml` | Alerts on Cloudflare edge gateway errors (502/504) seen by real client traffic, read from the log bridge |
 | `reusable-dependency-promotion.yml` | Labels Dependabot patch/minor PRs as `safe-merge-candidate`; optional auto-merge |
 
 All AI features degrade gracefully: without `AI_API_KEY` the workflows
 fall back to deterministic output and never fail the caller for a missing key.
+The edge error monitor degrades the same way: without PostHog credentials it
+skips cleanly.
+
+### Why the edge needs a monitor and not just probes
+
+Cloudflare's managed firewall challenges non-browser clients, so a probe run
+from a GitHub-hosted runner receives `403 cf-mitigated: challenge` from the
+edge before the edge would serve an application response. A challenge proves
+only that the edge answered the runner — it says nothing about what real
+clients receive, and a probe suite cannot assert past it.
+
+That blind spot is not hypothetical. A zone-wide edge fault served gateway
+errors to real clients for roughly a day while every scheduled check stayed
+green: the probe suite was pointed at the origin, and the public-route checks
+were challenged on every URL and treated an all-challenged run as a pass.
+
+Two changes follow from that:
+
+- `run-probes.mjs` reports `challenged` as its own outcome. Challenges do not
+  fail a run (they are the normal case from CI), but a run where nothing was
+  verified is labelled inconclusive instead of reading as a clean pass.
+- `reusable-edge-error-monitor.yml` watches the edge from the only vantage
+  point that sees real client outcomes: the Cloudflare request records the log
+  bridge already ships to PostHog. It alerts when gateway errors breach both a
+  count and a rate threshold, **and** when the feed delivers nothing at all —
+  an absent signal is not a healthy one.
 
 ## Calling from a spoke repo
 
@@ -94,6 +122,7 @@ repositories: Settings → Actions → General → Access →
 | `SLACK_BOT_TOKEN` / `SLACK_CHANNEL_ID` | status notify (threaded updates) | optional |
 | `INCIDENT_IO_WEBHOOK_URL` / `INCIDENT_IO_WEBHOOK_TOKEN` | incident alerts | optional |
 | `AI_API_KEY` | ci-triage, pr-risk-review, deploy-evidence AI summaries | optional |
+| `POSTHOG_API_KEY` / `POSTHOG_PROJECT_ID` | edge gateway-error monitor | optional |
 
 See the private internal docs repo at
 `ItemTraxxCo/itemtraxx-internal-docs/docs/devops/runbooks/secrets.md` for the
@@ -103,4 +132,5 @@ full matrix.
 
 Spokes should reference a pinned commit SHA. Update the pinned SHA as part of a
 normal hub rollout after validation. Hub CI (`hub-ci.yml`) lints all workflows
-with actionlint and syntax-checks all scripts on every push/PR.
+with actionlint, syntax-checks all scripts, and runs the script unit tests
+(`node --test 'scripts/**/*.test.mjs'`) on every push/PR.
