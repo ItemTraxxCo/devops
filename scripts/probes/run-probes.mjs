@@ -3,8 +3,8 @@
  * kill-switch awareness.
  *
  * Usage:
- *   node run-probes.mjs [config.json]          run probes
- *   node run-probes.mjs --validate config.json validate config only
+ *   node run-probes.mjs [config/<name>.json]          run probes
+ *   node run-probes.mjs --validate config/<name>.json validate config only
  *
  * Env:
  *   PROBES_CONFIG_JSON   inline JSON config; overrides the config file
@@ -31,7 +31,11 @@
  * }
  */
 
-import { readFileSync, appendFileSync } from 'node:fs';
+import { readFileSync, appendFileSync, realpathSync } from 'node:fs';
+import { isAbsolute, relative, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const CONFIG_DIRECTORY = realpathSync(fileURLToPath(new URL('../../config/', import.meta.url)));
 
 const DEFAULT_UA =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36 ItemTraxxProbe/1.0';
@@ -43,9 +47,18 @@ function loadConfig(argv) {
   }
   const filePath = argv.find((a) => !a.startsWith('--'));
   if (!filePath) {
-    throw new Error('No config: pass a config file path or set PROBES_CONFIG_JSON');
+    throw new Error('No config: pass a file under config/ or set PROBES_CONFIG_JSON');
   }
-  return JSON.parse(readFileSync(filePath, 'utf8'));
+  const resolvedPath = realpathSync(filePath);
+  const relativePath = relative(CONFIG_DIRECTORY, resolvedPath);
+  if (
+    relativePath === '..' ||
+    relativePath.startsWith(`..${sep}`) ||
+    isAbsolute(relativePath)
+  ) {
+    throw new Error('Config file must resolve inside the repository config/ directory');
+  }
+  return JSON.parse(readFileSync(resolvedPath, 'utf8'));
 }
 
 function normalizeHttpUrl(value, fieldName) {
