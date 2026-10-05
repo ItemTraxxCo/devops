@@ -86,6 +86,13 @@ For the private-spoke path this repo must remain accessible to org
 repositories: Settings → Actions → General → Access →
 "Accessible from repositories in the ItemTraxxCo organization".
 
+The hub Semgrep workflow uses the `semgrep-appsec` GitHub Actions environment
+for `SEMGREP_APP_TOKEN`. Configure its selected-branch rules to allow only
+`main` and, if still used, `master`. Separately protect each allowed branch.
+the token as an environment secret. Remove any repository-level copy and
+revoke this repository's access to any organization-level secret with the same
+name. Pull request and manual runs use token-free Semgrep scans.
+
 ## Secrets consumed (provided by callers)
 
 | Secret | Used by | Required |

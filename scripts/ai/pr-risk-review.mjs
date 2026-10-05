@@ -17,6 +17,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { askModel, extractJson, hasApiKey, renderPrompt } from './llm-client.mjs';
+import { markdownCodeFence, markdownCodeSpan } from '../markdown.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MARKER = '<!-- itx-pr-risk-review -->';
@@ -147,11 +148,11 @@ if (hasApiKey()) {
     aiUsed = true;
     ai = sanitizeAiReview(extractJson(answer));
     if (!ai) {
-      const excerpt = sanitizeText(answer, 200).replace(/[`\n]/g, ' ');
-      aiNote = `_AI reviewer returned an unparseable response (excerpt: "${excerpt}"); deterministic classification above still applies._`;
+      const excerpt = sanitizeText(answer, 200);
+      aiNote = '_AI reviewer returned an unparseable response (excerpt: ' + markdownCodeSpan(excerpt) + '); deterministic classification above still applies._';
     }
   } catch (err) {
-    aiNote = `_AI review failed (${sanitizeText(err.message || err, 200)}); deterministic classification above still applies._`;
+    aiNote = '_AI review failed (' + markdownCodeSpan(sanitizeText(err.message || err, 200)) + '); deterministic classification above still applies._';
   }
 } else {
   aiNote = '_AI narrative skipped: AI_API_KEY is not configured for this repository._';
@@ -164,34 +165,32 @@ lines.push('');
 if (matched.size === 0) {
   lines.push('No risk categories matched the changed files.');
 } else {
-  lines.push('| Category | Matched files |');
-  lines.push('| --- | --- |');
   for (const category of matched.values()) {
-    const sample = category.hits.slice(0, 3).map((h) => `\`${h}\``).join(', ');
-    const more = category.hits.length > 3 ? ` (+${category.hits.length - 3} more)` : '';
-    lines.push(`| ${category.name} | ${sample}${more} |`);
+    const sample = category.hits.slice(0, 3).map((h) => markdownCodeSpan(h)).join(', ');
+    const more = category.hits.length > 3 ? ' (+' + (category.hits.length - 3) + ' more)' : '';
+    lines.push('- **' + category.name + ':** ' + sample + more);
   }
 }
 lines.push('');
 
 if (ai) {
-  lines.push(`**Overall risk (AI):** ${ai.overall_risk}`);
+  lines.push('**Overall risk (AI):** ' + markdownCodeSpan(ai.overall_risk));
   lines.push('');
   if (ai.summary) {
-    lines.push(ai.summary);
+    lines.push(markdownCodeFence(ai.summary));
     lines.push('');
   }
   if (ai.review_focus.length > 0) {
     lines.push('**Review focus:**');
     for (const item of ai.review_focus.slice(0, 6)) {
-      lines.push(`- ${item}`);
+      lines.push('- ' + markdownCodeSpan(item));
     }
     lines.push('');
   }
   if (ai.missing_tests.length > 0) {
     lines.push('**Possibly missing tests:**');
     for (const item of ai.missing_tests.slice(0, 6)) {
-      lines.push(`- ${item}`);
+      lines.push('- ' + markdownCodeSpan(item));
     }
     lines.push('');
   }

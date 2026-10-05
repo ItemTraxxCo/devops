@@ -127,11 +127,14 @@ runs:
           --arg run_url "$RUN_URL" \
           --arg summary "$SUMMARY" \
           '{
-            text: (":mag: CI triage for failed workflow " + $workflow),
+            text: ":mag: CI failure triage",
             blocks: [
               { type: "header", text: { type: "plain_text", text: ":mag: CI failure triage" } },
-              { type: "section", text: { type: "mrkdwn", text: ("*Workflow:* " + $workflow + "\n*Run:* <" + $run_url + "|Open failing run>") } },
-              { type: "section", text: { type: "mrkdwn", text: $summary } }
+              { type: "section", text: { type: "plain_text", text: ("Workflow: " + $workflow + "\nRun: " + $run_url) } },
+              (if ($run_url | test("^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/[0-9]+$")) then
+                { type: "actions", elements: [{ type: "button", text: { type: "plain_text", text: "Open failing run" }, url: $run_url }] }
+              else empty end),
+              { type: "section", text: { type: "plain_text", text: $summary } }
             ]
           }')"
         curl -fsSL -X POST "$SLACK_WEBHOOK_URL" \

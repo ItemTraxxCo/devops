@@ -12,17 +12,37 @@ on:
   - cron: 0 16 * * *
 name: Semgrep
 jobs:
-  semgrep:
-    name: semgrep/ci
+  semgrep-pr:
+    name: semgrep/oss-pr
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    env:
-      SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
     container:
-      image: semgrep/semgrep
+      image: semgrep/semgrep@sha256:32e459968daabe7ab86968184a29109b9564aa00392401156f9788452b42786b # semgrep/semgrep:1.178.0
     steps:
     - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
       with:
         persist-credentials: false
-    - run: semgrep ci
+    - name: Run token-free Semgrep scan
+      run: semgrep scan --config auto
+
+  semgrep-appsec:
+    name: semgrep/appsec
+    if: ${{ github.event_name == 'push' || github.event_name == 'schedule' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    environment:
+      name: semgrep-appsec
+      deployment: false
+    container:
+      image: semgrep/semgrep@sha256:32e459968daabe7ab86968184a29109b9564aa00392401156f9788452b42786b # semgrep/semgrep:1.178.0
+    steps:
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        persist-credentials: false
+    - name: Run Semgrep AppSec scan
+      env:
+        SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+      run: semgrep ci

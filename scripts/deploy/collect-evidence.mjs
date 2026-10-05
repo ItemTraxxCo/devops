@@ -18,6 +18,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { askModel, hasApiKey, renderPrompt } from '../ai/llm-client.mjs';
+import { markdownCodeFence, markdownCodeSpan } from '../markdown.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -122,28 +123,26 @@ if (hasApiKey()) {
 
 const shortSha = sha.slice(0, 7);
 const md = [];
-md.push(`## Deploy evidence: ${workflowName}`);
+md.push('## Deploy evidence: ' + markdownCodeSpan(workflowName));
 md.push('');
-md.push(`- **Repository:** ${repository}`);
-md.push(`- **Commit:** \`${shortSha}\` on \`${evidence.run.branch || 'unknown'}\``);
-md.push(`- **Run:** ${evidence.run.url || `run ${runId}`} (${evidence.run.conclusion || 'unknown'})`);
-md.push(`- **Surfaces:** ${surfaces.join(', ') || 'unknown'}`);
-md.push(`- **Health probe:** ${evidence.health.url || 'n/a'} → HTTP ${evidence.health.http_status || 'n/a'}`);
+md.push('- **Repository:** ' + markdownCodeSpan(repository));
+md.push('- **Commit:** ' + markdownCodeSpan(shortSha) + ' on ' + markdownCodeSpan(evidence.run.branch || 'unknown'));
+md.push('- **Run:** ' + markdownCodeSpan(evidence.run.url || 'run ' + runId) + ' (' + markdownCodeSpan(evidence.run.conclusion || 'unknown') + ')');
+md.push('- **Surfaces:** ' + (surfaces.map((surface) => markdownCodeSpan(surface)).join(', ') || 'unknown'));
+md.push('- **Health probe:** ' + markdownCodeSpan(evidence.health.url || 'n/a') + ' → HTTP ' + markdownCodeSpan(evidence.health.http_status || 'n/a'));
 md.push(`- **Generated:** ${evidence.generated_at}`);
 md.push('');
 if (evidence.commit.message) {
   md.push('### Commit');
   md.push('');
-  md.push('```');
-  md.push(sanitizeText(evidence.commit.message, 1000));
-  md.push('```');
+  md.push(markdownCodeFence(sanitizeText(evidence.commit.message, 1000)));
   md.push('');
 }
 if (evidence.commit.files.length > 0) {
   md.push(`### Changed files (${evidence.commit.files.length})`);
   md.push('');
   for (const file of evidence.commit.files.slice(0, 50)) {
-    md.push(`- \`${file.filename}\` (${file.status}, +${file.additions}/-${file.deletions})`);
+    md.push('- ' + markdownCodeSpan(file.filename) + ' (' + markdownCodeSpan(file.status) + ', +' + file.additions + '/-' + file.deletions + ')');
   }
   if (evidence.commit.files.length > 50) {
     md.push(`- …and ${evidence.commit.files.length - 50} more`);
@@ -156,7 +155,7 @@ if (evidence.ai_summary_present) {
   md.push('_AI impact summary executed, but only deterministic deploy evidence is persisted in the artifact output._');
   md.push('');
 } else if (evidence.ai_summary_error) {
-  md.push(`_AI impact summary failed: ${evidence.ai_summary_error}_`);
+  md.push('_AI impact summary failed: ' + markdownCodeSpan(evidence.ai_summary_error) + '_');
   md.push('');
 } else {
   md.push('_AI impact summary skipped: AI_API_KEY is not configured for this repository._');

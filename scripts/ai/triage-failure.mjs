@@ -16,6 +16,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { askModel, hasApiKey, renderPrompt } from './llm-client.mjs';
 import { classifyOwnership } from '../alerts/ownership.mjs';
+import { markdownCodeSpan } from '../markdown.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MAX_LOG_CHARS = 40000;
@@ -48,14 +49,14 @@ const logs = fullLogs.length > MAX_LOG_CHARS ? fullLogs.slice(-MAX_LOG_CHARS) : 
 const ownership = classifyOwnership(logs);
 
 const lines = [];
-lines.push(`## CI failure triage: ${context.workflow_name || 'unknown workflow'}`);
+lines.push('## CI failure triage: ' + markdownCodeSpan(context.workflow_name || 'unknown workflow'));
 lines.push('');
-lines.push(`- **Run:** ${context.run_url || 'n/a'}`);
-lines.push(`- **Branch:** \`${context.branch || 'unknown'}\` at \`${(context.sha || '').slice(0, 7) || 'unknown'}\``);
-lines.push(`- **Failed jobs:** ${(context.failed_jobs || []).map((j) => `\`${j}\``).join(', ') || 'none detected'}`);
-lines.push(`- **Likely ownership area:** ${ownership.area}`);
+lines.push('- **Run:** ' + markdownCodeSpan(context.run_url || 'n/a'));
+lines.push('- **Branch:** ' + markdownCodeSpan(context.branch || 'unknown') + ' at ' + markdownCodeSpan((context.sha || '').slice(0, 7) || 'unknown'));
+lines.push('- **Failed jobs:** ' + ((context.failed_jobs || []).map((j) => markdownCodeSpan(j)).join(', ') || 'none detected'));
+lines.push('- **Likely ownership area:** ' + markdownCodeSpan(ownership.area));
 if (ownership.signals.length > 0) {
-  lines.push(`- **Signals:** ${ownership.signals.map((s) => `\`${s}\``).join(', ')}`);
+  lines.push('- **Signals:** ' + ownership.signals.map((s) => markdownCodeSpan(s)).join(', '));
 }
 lines.push('');
 
@@ -74,7 +75,7 @@ if (hasApiKey()) {
     await askModel({ user, maxTokens: 4000 });
     aiSection = '### AI analysis\n\n_AI triage executed, but only deterministic triage is persisted in the artifact output._';
   } catch (err) {
-    aiSection = `### AI analysis\n\n_AI triage failed (${sanitizeText(err.message || err, 200)}); deterministic triage above still applies._`;
+    aiSection = '### AI analysis\n\n_AI triage failed (' + markdownCodeSpan(sanitizeText(err.message || err, 200)) + '); deterministic triage above still applies._';
   }
 } else {
   aiSection = '### AI analysis\n\n_Skipped: AI_API_KEY is not configured for this repository._';

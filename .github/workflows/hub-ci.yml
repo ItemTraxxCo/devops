@@ -22,9 +22,11 @@ jobs:
       - name: Run actionlint
         run: |
           set -euo pipefail
-          ACTIONLINT_VERSION="1.7.7"
+          ACTIONLINT_VERSION="1.7.12"
+          ACTIONLINT_SHA256="8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
           curl -fsSL -o /tmp/actionlint.tar.gz \
             "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          printf '%s  %s\n' "$ACTIONLINT_SHA256" /tmp/actionlint.tar.gz | sha256sum --check --strict
           tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
           /tmp/actionlint -color
 
@@ -48,6 +50,9 @@ jobs:
             fi
           done < <(find scripts -name '*.mjs' -print0)
           exit "$FAILED"
+
+      - name: Test Markdown rendering helpers
+        run: node --test scripts/markdown.test.mjs
 
       - name: Validate probe configs
         run: |
