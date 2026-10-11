@@ -7,7 +7,7 @@ test('inline code keeps backticks and line breaks inside one code span', () => {
   const value = 'file' + tick + '](https://example.test)\nsecond-line';
   const result = markdownCodeSpan(value);
 
-  assert.equal(result, tick.repeat(2) + value.replace('\n', ' ') + tick.repeat(2));
+  assert.equal(result, tick.repeat(2) + value.replace(/\n/g, ' ') + tick.repeat(2));
   assert.equal(result.includes('\n'), false);
 });
 
