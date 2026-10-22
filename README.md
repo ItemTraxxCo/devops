@@ -55,6 +55,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ItemTraxxCo/devops
+          ref: e37465889bac8cf4a309ffb8d9488cec3f1f9cf2
           path: devops-hub
           persist-credentials: false
       - uses: ./devops-hub/actions/ci-triage
@@ -71,7 +72,7 @@ Spokes can also use the reusable workflow wrappers directly:
 ```yaml
 jobs:
   triage:
-    uses: ItemTraxxCo/devops/.github/workflows/reusable-ci-triage.yml@4685d5bf81e6311b8a9c09e71d83e1e544ca5fdb
+    uses: ItemTraxxCo/devops/.github/workflows/reusable-ci-triage.yml@e37465889bac8cf4a309ffb8d9488cec3f1f9cf2
     with:
       run_id: ${{ format('{0}', github.event.workflow_run.id) }}
     secrets:
