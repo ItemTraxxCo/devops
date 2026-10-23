@@ -1,0 +1,3 @@
+default-catalogers:
+  - github-actions-usage-cataloger
+  - github-action-workflow-usage-cataloger

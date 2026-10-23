@@ -1,0 +1,77 @@
+name: Workflow Dependency SBOM
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/**
+      - .github/actions/**
+      - .github/workflow-sbom-syft.yaml
+      - actions/**
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/**
+      - .github/actions/**
+      - .github/workflow-sbom-syft.yaml
+      - actions/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  workflow-sbom:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out DevOps Hub
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Stage workflow and composite-action definitions
+        run: |
+          set -euo pipefail
+          sbom_source="$RUNNER_TEMP/workflow-sbom-source"
+          mkdir -p "$sbom_source/.github"
+          cp -R .github/workflows "$sbom_source/.github/workflows"
+          if [[ -d .github/actions ]]; then
+            mkdir -p "$sbom_source/.github/actions"
+            cp -R .github/actions/. "$sbom_source/.github/actions/"
+          fi
+          if [[ -d actions ]]; then
+            cp -R actions "$sbom_source/actions"
+            shopt -s nullglob
+            for action_file in actions/*/action.yml actions/*/action.yaml; do
+              action_name="$(basename "$(dirname "$action_file")")"
+              mkdir -p "$sbom_source/.github/actions/$action_name"
+              cp "$action_file" "$sbom_source/.github/actions/$action_name/$(basename "$action_file")"
+            done
+          fi
+
+      - name: Generate workflow-only CycloneDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
+        with:
+          path: ${{ runner.temp }}/workflow-sbom-source
+          config: .github/workflow-sbom-syft.yaml
+          output-file: ${{ runner.temp }}/devops-syft.cdx.json
+          format: cyclonedx-json
+          syft-version: v1.55.0
+          upload-artifact: false
+          upload-release-assets: false
+          dependency-snapshot: false
+
+      - name: Require GitHub Actions components in CycloneDX SBOM
+        run: |
+          set -euo pipefail
+          jq -e '(.bomFormat == "CycloneDX") and any(.components[]?; (.purl // "") | startswith("pkg:github/"))' \
+            "$RUNNER_TEMP/devops-syft.cdx.json" >/dev/null
+
+      - name: Upload workflow SBOM artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.0
+        with:
+          name: sbom-devops-workflow-references
+          path: ${{ runner.temp }}/devops-syft.cdx.json
+          if-no-files-found: error
+          retention-days: 30
